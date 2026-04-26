@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ARCO</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f4f7fb;
+      margin: 0;
+      padding: 0;
+    }
+
+    .container {
+      max-width: 950px;
+      margin: 40px auto;
+      background: white;
+      padding: 30px;
+      border-radius: 14px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+    }
+
+    h1 {
+      margin-top: 0;
+      color: #1f3c88;
+    }
+
+    .subtitle {
+      color: #555;
+      margin-bottom: 24px;
+    }
+
+    .chat-box {
+      border: 1px solid #d9e2ec;
+      background: #f8fafc;
+      border-radius: 12px;
+      padding: 18px;
+      min-height: 320px;
+      max-height: 520px;
+      overflow-y: auto;
+      margin-bottom: 18px;
+    }
+
+    .message {
+      margin-bottom: 14px;
+      padding: 14px;
+      border-radius: 12px;
+      line-height: 1.5;
+    }
+
+    .user-message {
+      background-color: #dbeafe;
+      border: 1px solid #bfdbfe;
+    }
+
+    .assistant-message {
+      background-color: #eef2ff;
+      border: 1px solid #c7d2fe;
+    }
+
+    .message-title {
+      font-weight: bold;
+      margin-bottom: 6px;
+      color: #1f3c88;
+    }
+
+    .meta {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid #d9e2ec;
+      font-size: 14px;
+    }
+
+    .meta p {
+      margin: 6px 0;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 110px;
+      padding: 14px;
+      font-size: 16px;
+      border: 1px solid #cfd8e3;
+      border-radius: 10px;
+      resize: vertical;
+      box-sizing: border-box;
+    }
+
+    button {
+      margin-top: 16px;
+      background-color: #1f3c88;
+      color: white;
+      border: none;
+      padding: 12px 22px;
+      font-size: 16px;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background-color: #16306f;
+    }
+
+    button:disabled {
+      background-color: #8aa0d6;
+      cursor: not-allowed;
+    }
+
+    .error {
+      color: #b00020;
+      font-weight: bold;
+    }
+
+    .hint {
+      color: #666;
+      font-size: 14px;
+      margin-top: 10px;
+    }
+
+    a {
+      color: #1f3c88;
+      word-break: break-all;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>ARCO</h1>
+    <p class="subtitle">Asistente para el Registro Civil y su Orientación</p>
+
+    <div class="chat-box" id="chatBox">
+      <div class="message assistant-message">
+        <div class="message-title">ARCO</div>
+        <div>Hola. Puedes preguntarme por trámites del Registro Civil, por ejemplo: “quiero sacar pasaporte”.</div>
+      </div>
+    </div>
+
+    <textarea id="query" placeholder="Escribe tu consulta aquí"></textarea>
+    <button id="askButton">Enviar</button>
+    <p class="hint">Prueba luego una pregunta de seguimiento como: “¿y eso requiere clave única?”</p>
+  </div>
+
+  <script>
+    const askButton = document.getElementById("askButton");
+    const queryInput = document.getElementById("query");
+    const chatBox = document.getElementById("chatBox");
+
+    const history = [];
+    let currentContext = null;
+
+    function addMessage(role, htmlContent) {
+      const message = document.createElement("div");
+      message.className = `message ${role === "user" ? "user-message" : "assistant-message"}`;
+
+      const title = document.createElement("div");
+      title.className = "message-title";
+      title.textContent = role === "user" ? "Tú" : "ARCO";
+
+      const content = document.createElement("div");
+      content.innerHTML = htmlContent;
+
+      message.appendChild(title);
+      message.appendChild(content);
+      chatBox.appendChild(message);
+      chatBox.scrollTop = chatBox.scrollHeight;
+
+      return message;
+    }
+
+    function escapeHtml(text) {
+      return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    }
+
+    function buildAssistantHtml(data) {
+      return `
+        <div>${escapeHtml(data.respuesta || "No disponible")}</div>
+        <div class="meta">
+          <p><strong>Trámite:</strong> ${escapeHtml(data.tramite || "No disponible")}</p>
+          <p><strong>Canal:</strong> ${escapeHtml(data.canal || "No disponible")}</p>
+          <p><strong>Presencialidad:</strong> ${escapeHtml(data.presencialidad || "No disponible")}</p>
+          <p><strong>ClaveÚnica:</strong> ${escapeHtml(data.requiere_clave_unica || "No disponible")}</p>
+          <p><strong>Fuente:</strong> ${
+            data.fuente
+              ? `<a href="${data.fuente}" target="_blank">${data.fuente}</a>`
+              : "No disponible"
+          }</p>
+        </div>
+      `;
+    }
+
+    async function sendQuery() {
+      const query = queryInput.value.trim();
+
+      if (!query) {
+        addMessage("assistant", "<span class='error'>Debes escribir una consulta.</span>");
+        return;
+      }
+
+      addMessage("user", escapeHtml(query));
+      queryInput.value = "";
+      askButton.disabled = true;
+
+      const loadingMessage = addMessage("assistant", "Consultando a ARCO...");
+
+      try {
+        const response = await fetch("http://127.0.0.1:8000/ask", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            query: query,
+            history: history,
+            context: currentContext
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error("No se pudo obtener respuesta del backend.");
+        }
+
+        const data = await response.json();
+
+        loadingMessage.innerHTML = `
+          <div class="message-title">ARCO</div>
+          ${buildAssistantHtml(data)}
+        `;
+
+        history.push({ role: "user", content: query });
+        history.push({ role: "assistant", content: data.respuesta || "" });
+
+        if (data.tramite && data.tramite !== "No identificado") {
+          currentContext = {
+            tramite: data.tramite,
+            respuesta_base: data.respuesta_base || null,
+            canal: data.canal || null,
+            presencialidad: data.presencialidad || null,
+            requiere_clave_unica: data.requiere_clave_unica || null,
+            fuente: data.fuente || null
+          };
+        }
+      } catch (error) {
+        loadingMessage.innerHTML = `
+          <div class="message-title">ARCO</div>
+          <div class="error">Hubo un error al conectar con el backend.</div>
+        `;
+      } finally {
+        askButton.disabled = false;
+      }
+    }
+
+    askButton.addEventListener("click", sendQuery);
+
+    queryInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        sendQuery();
+      }
+    });
+  </script>
+</body>
+</html>
