@@ -180,6 +180,7 @@
         <div>${escapeHtml(data.respuesta || "No disponible")}</div>
         <div class="meta">
           <p><strong>Trámite:</strong> ${escapeHtml(data.tramite || "No disponible")}</p>
+          <p><strong>Costo:</strong> ${escapeHtml(data.costo || "No disponible")}</p>
           <p><strong>Canal:</strong> ${escapeHtml(data.canal || "No disponible")}</p>
           <p><strong>Presencialidad:</strong> ${escapeHtml(data.presencialidad || "No disponible")}</p>
           <p><strong>ClaveÚnica:</strong> ${escapeHtml(data.requiere_clave_unica || "No disponible")}</p>
@@ -237,6 +238,7 @@
           currentContext = {
             tramite: data.tramite,
             respuesta_base: data.respuesta_base || null,
+            costo: data.costo || null,
             canal: data.canal || null,
             presencialidad: data.presencialidad || null,
             requiere_clave_unica: data.requiere_clave_unica || null,
