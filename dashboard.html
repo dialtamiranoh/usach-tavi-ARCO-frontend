@@ -396,9 +396,10 @@
 
 <script>
 const API = "http://127.0.0.1:8000";
-let allMetrics   = [];
-let timelineData = {};
-let traceIds     = { granite: null, qwen: null };
+let allMetrics    = [];
+let timelineData  = {};
+let traceIds      = { granite: null, qwen: null };
+let feedbackState = { granite: { traceId: null, score: null }, qwen: { traceId: null, score: null } };
 let chartLatency, chartFeedback;
 function computeCompare(metrics) {
   const defs = { granite: 'Granite-3.1-3B', qwen: 'Qwen2.5-3B' };
@@ -613,12 +614,14 @@ function renderLastResponses() {
   if (granite) {
     traceIds.granite = granite.trace_id;
     const meta = `${Math.round(granite.latency_ms ?? 0)} ms · ${granite.total_tokens ?? 0} tok · ${granite.fallback ? '⚠️ fallback' : '✅'}`;
-    setPanel('granite', granite.respuesta || '—', meta, true);
+    const gScore = granite.feedback?.score ?? (feedbackState.granite.traceId === granite.trace_id ? feedbackState.granite.score : null);
+    setPanel('granite', granite.respuesta || '—', meta, true, gScore);
   }
   if (qwen) {
     traceIds.qwen = qwen.trace_id;
     const meta = `${Math.round(qwen.latency_ms ?? 0)} ms · ${qwen.total_tokens ?? 0} tok · ${qwen.fallback ? '⚠️ fallback' : '✅'}`;
-    setPanel('qwen', qwen.respuesta || '—', meta, true);
+    const qScore = qwen.feedback?.score ?? (feedbackState.qwen.traceId === qwen.trace_id ? feedbackState.qwen.score : null);
+    setPanel('qwen', qwen.respuesta || '—', meta, true, qScore);
   }
 
   renderQueryStats(granite, qwen);
@@ -665,7 +668,7 @@ function renderQueryStats(granite, qwen) {
   setBar('qs-bar-q-tok', qTok / maxTok * 100, qTok);
 }
 
-function setPanel(model, text, meta, showFeedback) {
+function setPanel(model, text, meta, showFeedback, feedbackScore) {
   const isG = model === 'granite';
   const el  = document.getElementById(isG ? 'g-response' : 'q-response');
   const mt  = document.getElementById(isG ? 'g-meta'     : 'q-meta');
@@ -674,7 +677,17 @@ function setPanel(model, text, meta, showFeedback) {
   el.innerHTML = text;
   mt.textContent = meta;
   if (fb) {
-    fb.querySelectorAll('.fb-btn').forEach(b => b.classList.remove('selected-pos', 'selected-neg'));
+    const btns  = fb.querySelectorAll('.fb-btn');
+    const scores = [1.0, 0.5, 0.0];
+    btns.forEach(b => b.classList.remove('selected-pos', 'selected-neg'));
+    if (feedbackScore != null) {
+      btns.forEach((b, i) => {
+        if (Math.abs(scores[i] - feedbackScore) < 0.01) {
+          const cls = feedbackScore >= 0.8 ? 'selected-pos' : feedbackScore <= 0.2 ? 'selected-neg' : null;
+          if (cls) b.classList.add(cls);
+        }
+      });
+    }
     fb.style.display = showFeedback ? 'flex' : 'none';
   }
 }
@@ -688,9 +701,11 @@ async function sendFeedback(modelKey, score, btn) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ trace_id: tid, model: modelKey, score }),
     });
+    feedbackState[modelKey] = { traceId: tid, score };
     const container = btn.closest('.feedback-btns');
     container.querySelectorAll('.fb-btn').forEach(b => b.classList.remove('selected-pos','selected-neg'));
-    btn.classList.add(score >= 0.8 ? 'selected-pos' : score <= 0.2 ? 'selected-neg' : '');
+    const cls = score >= 0.8 ? 'selected-pos' : score <= 0.2 ? 'selected-neg' : null;
+    if (cls) btn.classList.add(cls);
   } catch(e) { console.error(e); }
 }
 
