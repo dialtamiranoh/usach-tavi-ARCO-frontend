@@ -293,11 +293,11 @@
       const loadingMessage = addMessage("assistant", "Consultando a ARCO...");
 
       try {
-        // Dispara el modelo de fondo sin bloquear (benchmark silencioso)
-        callBenchmark(otherModel, query).catch(() => null);
-
         // Espera solo la respuesta del modelo seleccionado
         const selectedResult = await callBenchmark(selectedModel, query);
+
+        // Dispara el modelo de fondo sin bloquear (benchmark silencioso)
+        callBenchmark(otherModel, query).catch(() => null);
 
         if (!selectedResult.ok) {
           throw new Error("No se pudo obtener respuesta del backend.");
