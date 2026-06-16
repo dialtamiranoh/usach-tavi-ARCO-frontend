@@ -175,7 +175,7 @@
     <div class="model-card qwen card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
         <div>
-          <div class="model-name">Qwen2.5-3B</div>
+          <div class="model-name">Qwen2.5-1.5B</div>
           <span class="model-tag tag-q">Alibaba · puerto 8002</span>
         </div>
         <span id="q-consultas" style="font-size:22px;font-weight:500">—</span>
@@ -402,7 +402,7 @@ let traceIds      = { granite: null, qwen: null };
 let feedbackState = { granite: { traceId: null, score: null }, qwen: { traceId: null, score: null } };
 let chartLatency, chartFeedback;
 function computeCompare(metrics) {
-  const defs = { granite: 'Granite-3.1-2B', qwen: 'Qwen2.5-3B' };
+  const defs = { granite: 'Granite-3.1-2B', qwen: 'Qwen2.5-1.5B' };
   const result = {};
   for (const [key, label] of Object.entries(defs)) {
     const sub = metrics.filter(m => m.model_key === key);
