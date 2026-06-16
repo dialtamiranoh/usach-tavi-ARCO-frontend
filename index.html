@@ -166,6 +166,11 @@
       background: #EAF3DE;
       color: #27500A;
     }
+
+    .badge-fallback {
+      background: #FBEAEA;
+      color: #7C0C0C;
+    }
   </style>
 </head>
 <body>
@@ -241,8 +246,8 @@
     }
 
     function buildAssistantHtml(data, modelKey) {
-      const label      = MODEL_LABELS[modelKey] || modelKey;
-      const badgeClass = MODEL_BADGE_CLASS[modelKey] || "";
+      const label      = data.fallback ? "Fallback" : (MODEL_LABELS[modelKey] || modelKey);
+      const badgeClass = data.fallback ? "badge-fallback" : (MODEL_BADGE_CLASS[modelKey] || "");
       return `
         <div>${escapeHtml(data.respuesta || "No disponible")}</div>
         <div class="meta">
