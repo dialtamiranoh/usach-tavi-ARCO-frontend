@@ -293,21 +293,35 @@
       const loadingMessage = addMessage("assistant", "Consultando a ARCO...");
 
       try {
-        // Espera solo la respuesta del modelo seleccionado
-        const selectedResult = await callBenchmark(selectedModel, query);
+        // Dispara ambos modelos en paralelo (el segundo, sin bloquear, para benchmark)
+        const selectedPromise = callBenchmark(selectedModel, query);
+        const otherPromise    = callBenchmark(otherModel, query).catch(() => null);
 
-        // Dispara el modelo de fondo sin bloquear (benchmark silencioso)
-        callBenchmark(otherModel, query).catch(() => null);
+        const selectedResult = await selectedPromise;
 
         if (!selectedResult.ok) {
           throw new Error("No se pudo obtener respuesta del backend.");
         }
 
-        const data = await selectedResult.json();
+        let data       = await selectedResult.json();
+        let actualModel = selectedModel;
+
+        // Si el modelo elegido no respondió realmente, usa la respuesta del otro
+        // modelo si este sí funcionó, en vez del texto de respaldo por defecto.
+        if (data.fallback) {
+          const otherResult = await otherPromise;
+          if (otherResult && otherResult.ok) {
+            const otherData = await otherResult.json();
+            if (!otherData.fallback) {
+              data        = otherData;
+              actualModel = otherModel;
+            }
+          }
+        }
 
         loadingMessage.innerHTML = `
           <div class="message-title">ARCO</div>
-          ${buildAssistantHtml(data, selectedModel)}
+          ${buildAssistantHtml(data, actualModel)}
         `;
 
         history.push({ role: "user",      content: query });
