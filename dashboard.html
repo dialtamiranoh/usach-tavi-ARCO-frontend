@@ -439,15 +439,15 @@ function computeCompare(metrics) {
 }
 
 /* ── Tab switching ── */
-function showTab(name) {
+async function showTab(name) {
   ['comparar','consultar','historial'].forEach(t => {
     document.getElementById('tab-' + t).style.display = t === name ? '' : 'none';
   });
   document.querySelectorAll('.tab').forEach((el, i) => {
     el.classList.toggle('active', ['comparar','consultar','historial'][i] === name);
   });
+  await loadAll();
   if (name === 'historial') renderHistory();
-  if (name === 'consultar') renderLastResponses();
 }
 
 /* ── Fetch data ── */
