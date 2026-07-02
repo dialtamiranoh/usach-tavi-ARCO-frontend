@@ -174,14 +174,9 @@
       vertical-align: middle;
     }
 
-    .badge-granite {
+    .badge-model {
       background: #E6F1FB;
       color: #0C447C;
-    }
-
-    .badge-qwen {
-      background: #EAF3DE;
-      color: #27500A;
     }
 
     .badge-fallback {
@@ -269,14 +264,6 @@
     <h1>ARCO</h1>
     <p class="subtitle">Asistente para el Registro Civil y su Orientación</p>
 
-    <div class="model-selector">
-      <label for="modelSelect">Modelo:</label>
-      <select id="modelSelect">
-        <option value="granite">Granite-4.0-1B (IBM)</option>
-        <option value="qwen">Qwen2.5-3B (Alibaba)</option>
-      </select>
-    </div>
-
     <div class="chat-box" id="chatBox">
       <div class="message assistant-message">
         <div class="message-title">ARCO</div>
@@ -291,25 +278,14 @@
   </div>
 
   <script>
-    const BENCHMARK_API = "http://127.0.0.1:8000";
+    const API = "http://127.0.0.1:8000";
 
     const askButton  = document.getElementById("askButton");
     const queryInput = document.getElementById("query");
-    const modelSelect = document.getElementById("modelSelect");
     const chatBox    = document.getElementById("chatBox");
 
     const history = [];
     let currentContext = null;
-
-    const MODEL_LABELS = {
-      granite: "Granite-4.0-1B",
-      qwen:    "Qwen2.5-3B",
-    };
-
-    const MODEL_BADGE_CLASS = {
-      granite: "badge-granite",
-      qwen:    "badge-qwen",
-    };
 
     function addMessage(role, htmlContent) {
       const message = document.createElement("div");
@@ -337,9 +313,9 @@
         .replace(/>/g, "&gt;");
     }
 
-    function buildAssistantHtml(data, modelKey) {
-      const label      = data.fallback ? "Fallback" : (MODEL_LABELS[modelKey] || modelKey);
-      const badgeClass = data.fallback ? "badge-fallback" : (MODEL_BADGE_CLASS[modelKey] || "");
+    function buildAssistantHtml(data) {
+      const label      = data.fallback ? "Fallback" : (data.model_used || "ARCO");
+      const badgeClass = data.fallback ? "badge-fallback" : "badge-model";
       return `
         <div>${escapeHtml(data.respuesta || "No disponible")}</div>
         <div class="meta">
@@ -359,13 +335,12 @@
       `;
     }
 
-    function callBenchmark(modelKey, query) {
-      return fetch(`${BENCHMARK_API}/ask`, {
+    function callAsk(query) {
+      return fetch(`${API}/ask`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           query:    query,
-          model:    modelKey,
           history:  history,
           context:  currentContext,
         }),
@@ -379,9 +354,6 @@
         addMessage("assistant", "<span class='error'>Debes escribir una consulta.</span>");
         return;
       }
-
-      const selectedModel = modelSelect.value;
-      const otherModel    = selectedModel === "granite" ? "qwen" : "granite";
 
       addMessage("user", escapeHtml(query));
       queryInput.value  = "";
@@ -397,35 +369,17 @@
       `);
 
       try {
-        // Dispara ambos modelos en paralelo (el segundo, sin bloquear, para benchmark)
-        const selectedPromise = callBenchmark(selectedModel, query);
-        const otherPromise    = callBenchmark(otherModel, query).catch(() => null);
+        const result = await callAsk(query);
 
-        const selectedResult = await selectedPromise;
-
-        if (!selectedResult.ok) {
+        if (!result.ok) {
           throw new Error("No se pudo obtener respuesta del backend.");
         }
 
-        let data       = await selectedResult.json();
-        let actualModel = selectedModel;
-
-        // Si el modelo elegido no respondió realmente, usa la respuesta del otro
-        // modelo si este sí funcionó, en vez del texto de respaldo por defecto.
-        if (data.fallback) {
-          const otherResult = await otherPromise;
-          if (otherResult && otherResult.ok) {
-            const otherData = await otherResult.json();
-            if (!otherData.fallback) {
-              data        = otherData;
-              actualModel = otherModel;
-            }
-          }
-        }
+        const data = await result.json();
 
         loadingMessage.innerHTML = `
           <div class="message-title">ARCO</div>
-          ${buildAssistantHtml(data, actualModel)}
+          ${buildAssistantHtml(data)}
         `;
 
         history.push({ role: "user",      content: query });
