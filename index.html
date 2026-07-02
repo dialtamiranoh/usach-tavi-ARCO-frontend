@@ -107,6 +107,23 @@
       cursor: not-allowed;
     }
 
+
+    .whatsapp-quick-button {
+      background-color: #25D366;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-left: 8px;
+    }
+
+    .whatsapp-quick-button:hover {
+      background-color: #1ebe5d;
+    }
+
     .error {
       color: #b00020;
       font-weight: bold;
@@ -256,7 +273,7 @@
       <label for="modelSelect">Modelo:</label>
       <select id="modelSelect">
         <option value="granite">Granite-4.0-1B (IBM)</option>
-        <option value="qwen">Qwen2.5-1.5B (Alibaba)</option>
+        <option value="qwen">Qwen2.5-3B (Alibaba)</option>
       </select>
     </div>
 
@@ -269,6 +286,7 @@
 
     <textarea id="query" placeholder="Escribe tu consulta aquí"></textarea>
     <button id="askButton">Enviar</button>
+    <button id="whatsappButton" type="button" class="whatsapp-quick-button">Continuar en WhatsApp</button>
     <p class="hint">Prueba luego una pregunta de seguimiento como: “¿y eso requiere clave única?”</p>
   </div>
 
@@ -285,7 +303,7 @@
 
     const MODEL_LABELS = {
       granite: "Granite-4.0-1B",
-      qwen:    "Qwen2.5-1.5B",
+      qwen:    "Qwen2.5-3B",
     };
 
     const MODEL_BADGE_CLASS = {
@@ -445,5 +463,64 @@
       }
     });
   </script>
+
+  <script>
+    (function () {
+      const WHATSAPP_NUMBER = "15556429941";
+      const whatsappButton = document.getElementById("whatsappButton");
+      const queryInput = document.getElementById("query");
+      const askButton = document.getElementById("askButton");
+      const chatBox = document.getElementById("chat");
+
+      let lastQuery = "";
+
+      function rememberQuery() {
+        const value = queryInput && queryInput.value ? queryInput.value.trim() : "";
+        if (value) {
+          lastQuery = value;
+        }
+      }
+
+      function getLastUserMessage() {
+        if (!chatBox) return "";
+        const users = chatBox.querySelectorAll(".message.user, .user");
+        if (!users.length) return "";
+
+        const raw = users[users.length - 1].innerText || "";
+        const lines = raw
+          .split(/\n/)
+          .map(line => line.trim())
+          .filter(Boolean);
+
+        if (lines.length > 1 && lines[0].toLowerCase().startsWith("tu")) {
+          lines.shift();
+        }
+
+        return lines.join(" ").trim();
+      }
+
+      if (askButton) {
+        askButton.addEventListener("click", rememberQuery, true);
+      }
+
+      if (queryInput) {
+        queryInput.addEventListener("keydown", function (event) {
+          if (event.key === "Enter" && !event.shiftKey) {
+            rememberQuery();
+          }
+        }, true);
+      }
+
+      if (whatsappButton) {
+        whatsappButton.addEventListener("click", function () {
+          const currentQuery = queryInput && queryInput.value ? queryInput.value.trim() : "";
+          const text = currentQuery || lastQuery || getLastUserMessage() || "quiero consultar un tramite";
+          const url = "https://wa.me/" + WHATSAPP_NUMBER + "?text=" + encodeURIComponent(text);
+          window.open(url, "_blank", "noopener,noreferrer");
+        });
+      }
+    })();
+  </script>
+
 </body>
 </html>
