@@ -3,24 +3,38 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ARCO — Benchmark Granite vs Qwen</title>
+<title>ARCO — Dashboard de métricas</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   :root {
-    --bg:       #f4f7fb;
-    --surface:  #ffffff;
-    --border:   #e2e8f0;
-    --text:     #1e293b;
-    --muted:    #64748b;
-    --granite:  #378ADD;
-    --granite-l:#E6F1FB;
-    --granite-d:#0C447C;
-    --qwen:     #639922;
-    --qwen-l:   #EAF3DE;
-    --qwen-d:   #27500A;
-    --radius:   12px;
+    --bg:        #f4f7fb;
+    --surface:   #ffffff;
+    --border:    #e2e8f0;
+    --text:      #1e293b;
+    --muted:     #64748b;
+
+    /* categorical roles — validated with scripts/validate_palette.js (light, surface #ffffff) */
+    --web:       #2a78d6;  /* blue   */
+    --web-l:     #E6F1FB;
+    --web-d:     #0C447C;
+    --whatsapp:  #008300;  /* green  */
+    --whatsapp-l:#E4F3E4;
+    --whatsapp-d:#0A5A0A;
+    --latencia:  #2a78d6;  /* blue   */
+    --ttft:      #eb6834;  /* orange */
+    --violet:    #4a3aa7;
+
+    --good:      #0ca30c;
+    --critical:  #d03b3b;
+
+    /* feedback donut — validated categorical triplet (light, surface #ffffff) */
+    --fb-pos:    #008300;  /* green  */
+    --fb-neu:    #eda100;  /* yellow — sub-3:1 vs surface, relief via visible labels */
+    --fb-neg:    #e34948;  /* red    */
+
+    --radius: 12px;
   }
 
   body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); padding: 24px; }
@@ -29,7 +43,7 @@
   .subtitle { font-size: 13px; color: var(--muted); margin-bottom: 24px; }
 
   /* ── Tabs ── */
-  .tabs { display: flex; gap: 4px; margin-bottom: 24px; border-bottom: 1px solid var(--border); }
+  .tabs { display: flex; gap: 4px; margin-bottom: 24px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
   .tab  { padding: 8px 16px; font-size: 14px; cursor: pointer; border: none; background: none;
           color: var(--muted); border-bottom: 2px solid transparent; transition: all .15s; }
   .tab.active { color: var(--text); border-bottom-color: #1f3c88; font-weight: 500; }
@@ -40,9 +54,6 @@
   .card-val   { font-size: 26px; font-weight: 500; }
   .card-sub   { font-size: 12px; color: var(--muted); margin-top: 2px; }
 
-  .win { color: var(--qwen-d); }
-  .win-g { color: var(--granite-d); }
-
   /* ── Grids ── */
   .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
   .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
@@ -51,53 +62,29 @@
   .mb16 { margin-bottom: 16px; }
   .mb24 { margin-bottom: 24px; }
 
-  /* ── Model header cards ── */
-  .model-card { border-radius: var(--radius); border: 1px solid var(--border); padding: 16px 20px; }
-  .model-card.granite { border-top: 3px solid var(--granite); }
-  .model-card.qwen    { border-top: 3px solid var(--qwen); }
-  .model-name { font-size: 16px; font-weight: 500; margin-bottom: 2px; }
-  .model-tag  { font-size: 11px; padding: 2px 8px; border-radius: 20px; display: inline-block; }
-  .tag-g { background: var(--granite-l); color: var(--granite-d); }
-  .tag-q { background: var(--qwen-l);    color: var(--qwen-d); }
-
   .metric-row { display: flex; justify-content: space-between; font-size: 13px; padding: 5px 0; border-bottom: 1px solid var(--border); }
   .metric-row:last-child { border-bottom: none; }
   .metric-row .label { color: var(--muted); }
-  .metric-row .val   { font-weight: 500; }
-
-  /* ── Bar comparisons ── */
-  .bar-group { margin-bottom: 20px; }
-  .bar-label { font-size: 13px; color: var(--muted); margin-bottom: 8px; }
-  .bar-row   { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
-  .bar-name  { font-size: 12px; width: 60px; text-align: right; color: var(--muted); flex-shrink: 0; }
-  .bar-track { flex: 1; height: 22px; background: var(--bg); border-radius: 4px; overflow: hidden; }
-  .bar-fill  { height: 100%; display: flex; align-items: center; justify-content: flex-end;
-               padding-right: 10px; font-size: 11px; font-weight: 500; border-radius: 4px;
-               transition: width .6s ease; }
-  .bar-g { background: var(--granite-l); color: var(--granite-d); }
-  .bar-q { background: var(--qwen-l);    color: var(--qwen-d); }
+  .metric-row .val   { font-weight: 500; font-variant-numeric: tabular-nums; }
 
   /* ── Table ── */
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   thead th { background: #f8fafc; color: var(--muted); padding: 10px 12px; text-align: left;
              border-bottom: 1px solid var(--border); font-weight: 500; font-size: 12px; }
-  tbody td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tbody td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; font-variant-numeric: tabular-nums; }
   tbody tr:hover { background: #f8fafc; }
   tbody tr:last-child td { border-bottom: none; }
 
   /* ── Badges ── */
   .badge { font-size: 11px; padding: 2px 8px; border-radius: 20px; display: inline-block; }
-  .badge-g { background: var(--granite-l); color: var(--granite-d); }
-  .badge-q { background: var(--qwen-l);    color: var(--qwen-d); }
+  .badge-web { background: var(--web-l); color: var(--web-d); }
+  .badge-wa  { background: var(--whatsapp-l); color: var(--whatsapp-d); }
   .badge-ok  { background: #dcfce7; color: #166534; }
   .badge-err { background: #fee2e2; color: #991b1b; }
 
-  /* ── Consul tador ── */
-  .consultor { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-  .response-panel { border-radius: var(--radius); border: 1px solid var(--border);
+  /* ── Consultador ── */
+  .response-panel { border-radius: var(--radius); border: 1px solid var(--border); border-top: 3px solid var(--web);
                     padding: 16px; min-height: 160px; font-size: 14px; line-height: 1.6; }
-  .response-panel.granite-panel { border-top: 3px solid var(--granite); }
-  .response-panel.qwen-panel    { border-top: 3px solid var(--qwen); }
   .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
   .panel-title  { font-size: 13px; font-weight: 500; }
   .meta-pill    { font-size: 11px; color: var(--muted); }
@@ -105,9 +92,6 @@
   .response-empty { color: var(--muted); font-style: italic; font-size: 13px; }
 
   .query-bar { display: flex; gap: 10px; margin-bottom: 16px; }
-  .query-bar input { flex: 1; padding: 10px 14px; border: 1px solid var(--border); border-radius: 30px;
-                     font-size: 14px; outline: none; }
-  .query-bar input:focus { border-color: #1f3c88; }
   .btn { padding: 10px 20px; border-radius: 30px; border: none; cursor: pointer; font-size: 14px; font-weight: 500; }
   .btn-primary { background: #1f3c88; color: white; }
   .btn-primary:hover { background: #0f2c6b; }
@@ -122,6 +106,8 @@
 
   /* ── Chart wrappers ── */
   .chart-wrap { position: relative; }
+  .chart-legend { display: flex; gap: 16px; font-size: 12px; color: var(--muted); margin-bottom: 8px; flex-wrap: wrap; }
+  .chart-legend span.dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
 
   /* ── Section headings ── */
   .section-title { font-size: 15px; font-weight: 500; margin-bottom: 12px; }
@@ -134,125 +120,86 @@
   /* ── Responsive ── */
   @media (max-width: 700px) {
     .grid-4, .grid-3 { grid-template-columns: 1fr 1fr; }
-    .grid-2, .consultor { grid-template-columns: 1fr; }
-    .bar-name { width: 44px; }
+    .grid-2 { grid-template-columns: 1fr; }
   }
 </style>
 </head>
 <body>
 
-<h1>⚖️ ARCO — Benchmark Granite vs Qwen</h1>
+<h1>📊 ARCO — Dashboard de métricas</h1>
 <p class="subtitle" id="lastUpdated">Cargando datos…</p>
 
 <!-- Tabs -->
 <div class="tabs">
-  <button class="tab active" onclick="showTab('comparar')">Comparar modelos</button>
+  <button class="tab active" onclick="showTab('resumen')">Resumen</button>
+  <button class="tab" onclick="showTab('equipo')">WhatsApp por integrante</button>
   <button class="tab" onclick="showTab('consultar')">Consultar en vivo</button>
   <button class="tab" onclick="showTab('historial')">Historial</button>
 </div>
 
 <!-- ════════════════════════════════════════════════
-     TAB 1 — COMPARAR
+     TAB 1 — RESUMEN
 ════════════════════════════════════════════════ -->
-<div id="tab-comparar">
+<div id="tab-resumen">
 
-  <!-- Resumen por modelo -->
-  <div class="grid-2 mb24" id="modelCards">
-    <div class="model-card granite card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-        <div>
-          <div class="model-name">Granite-4.0-1B</div>
-          <span class="model-tag tag-g">IBM · puerto 8001</span>
-        </div>
-        <span id="g-consultas" style="font-size:22px;font-weight:500">—</span>
-      </div>
-      <div class="metric-row"><span class="label">Latencia p50</span><span class="val" id="g-lat">—</span></div>
-      <div class="metric-row"><span class="label">Latencia p95</span><span class="val" id="g-p95">—</span></div>
-      <div class="metric-row"><span class="label">Tokens / consulta</span><span class="val" id="g-tok">—</span></div>
-      <div class="metric-row"><span class="label">Tasa fallback</span><span class="val" id="g-fb">—</span></div>
-      <div class="metric-row"><span class="label">Feedback positivo</span><span class="val" id="g-pos">—</span></div>
+  <div class="grid-4 mb24" id="summaryTiles">
+    <div class="card">
+      <p class="card-title">Consultas totales</p>
+      <p class="card-val" id="s-total">—</p>
+      <p class="card-sub" id="s-total-sub">—</p>
     </div>
-    <div class="model-card qwen card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-        <div>
-          <div class="model-name">Qwen2.5-1.5B</div>
-          <span class="model-tag tag-q">Alibaba · puerto 8002</span>
-        </div>
-        <span id="q-consultas" style="font-size:22px;font-weight:500">—</span>
-      </div>
-      <div class="metric-row"><span class="label">Latencia p50</span><span class="val" id="q-lat">—</span></div>
-      <div class="metric-row"><span class="label">Latencia p95</span><span class="val" id="q-p95">—</span></div>
-      <div class="metric-row"><span class="label">Tokens / consulta</span><span class="val" id="q-tok">—</span></div>
-      <div class="metric-row"><span class="label">Tasa fallback</span><span class="val" id="q-fb">—</span></div>
-      <div class="metric-row"><span class="label">Feedback positivo</span><span class="val" id="q-pos">—</span></div>
+    <div class="card">
+      <p class="card-title">Latencia promedio</p>
+      <p class="card-val" id="s-lat">—</p>
+      <p class="card-sub" id="s-lat-p95">—</p>
+    </div>
+    <div class="card">
+      <p class="card-title">Tiempo al primer token (TTFT)</p>
+      <p class="card-val" id="s-ttft">—</p>
+      <p class="card-sub" id="s-ttft-p95">—</p>
+    </div>
+    <div class="card">
+      <p class="card-title">Tasa de fallback</p>
+      <p class="card-val" id="s-fb">—</p>
+      <p class="card-sub" id="s-fb-sub">Modelo activo: <span id="s-model">—</span></p>
     </div>
   </div>
 
-  <!-- Barras comparativas -->
-  <div class="card mb24">
-    <p class="section-title">Comparación directa</p>
-
-    <div class="bar-group">
-      <div class="bar-label">Latencia promedio (ms) — menor es mejor</div>
-      <div class="bar-row">
-        <div class="bar-name">Granite</div>
-        <div class="bar-track"><div class="bar-fill bar-g" id="bar-g-lat" style="width:0%">—</div></div>
-      </div>
-      <div class="bar-row">
-        <div class="bar-name">Qwen</div>
-        <div class="bar-track"><div class="bar-fill bar-q" id="bar-q-lat" style="width:0%">—</div></div>
-      </div>
-    </div>
-
-    <div class="bar-group">
-      <div class="bar-label">Tokens por consulta — menor es mejor</div>
-      <div class="bar-row">
-        <div class="bar-name">Granite</div>
-        <div class="bar-track"><div class="bar-fill bar-g" id="bar-g-tok" style="width:0%">—</div></div>
-      </div>
-      <div class="bar-row">
-        <div class="bar-name">Qwen</div>
-        <div class="bar-track"><div class="bar-fill bar-q" id="bar-q-tok" style="width:0%">—</div></div>
-      </div>
-    </div>
-
-    <div class="bar-group">
-      <div class="bar-label">Feedback positivo (%) — mayor es mejor</div>
-      <div class="bar-row">
-        <div class="bar-name">Granite</div>
-        <div class="bar-track"><div class="bar-fill bar-g" id="bar-g-pos" style="width:0%">—</div></div>
-      </div>
-      <div class="bar-row">
-        <div class="bar-name">Qwen</div>
-        <div class="bar-track"><div class="bar-fill bar-q" id="bar-q-pos" style="width:0%">—</div></div>
-      </div>
-    </div>
-
-    <div class="bar-group" style="margin-bottom:0">
-      <div class="bar-label">Tasa de fallback (%) — menor es mejor</div>
-      <div class="bar-row">
-        <div class="bar-name">Granite</div>
-        <div class="bar-track"><div class="bar-fill bar-g" id="bar-g-fb" style="width:0%">—</div></div>
-      </div>
-      <div class="bar-row">
-        <div class="bar-name">Qwen</div>
-        <div class="bar-track"><div class="bar-fill bar-q" id="bar-q-fb" style="width:0%">—</div></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Gráficos -->
   <div class="grid-2 mb24">
     <div class="card">
-      <p class="section-title">Latencia en el tiempo</p>
+      <p class="section-title">Latencia y TTFT en el tiempo (últimas 30 consultas)</p>
+      <div class="chart-legend">
+        <span><span class="dot" style="background:var(--latencia)"></span>Latencia total</span>
+        <span><span class="dot" style="background:var(--ttft)"></span>Tiempo al primer token</span>
+      </div>
       <div class="chart-wrap" style="height:220px">
-        <canvas id="chartLatency" role="img" aria-label="Latencia en el tiempo por modelo"></canvas>
+        <canvas id="chartLatency" role="img" aria-label="Latencia y TTFT en el tiempo"></canvas>
       </div>
     </div>
     <div class="card">
-      <p class="section-title">Distribución de feedback</p>
+      <p class="section-title">Consultas por canal</p>
+      <div class="chart-legend">
+        <span><span class="dot" style="background:var(--web)"></span>Web</span>
+        <span><span class="dot" style="background:var(--whatsapp)"></span>WhatsApp</span>
+      </div>
       <div class="chart-wrap" style="height:220px">
-        <canvas id="chartFeedback" role="img" aria-label="Distribución de feedback por modelo"></canvas>
+        <canvas id="chartChannels" role="img" aria-label="Consultas por canal"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid-2 mb24">
+    <div class="card">
+      <p class="section-title">Trámites más consultados</p>
+      <div class="chart-wrap" style="height:260px">
+        <canvas id="chartTramites" role="img" aria-label="Trámites más consultados"></canvas>
+      </div>
+    </div>
+    <div class="card">
+      <p class="section-title">Feedback de los usuarios</p>
+      <div class="chart-legend" id="feedbackLegend"></div>
+      <div class="chart-wrap" style="height:220px">
+        <canvas id="chartFeedback" role="img" aria-label="Distribución de feedback positivo, neutral y negativo"></canvas>
       </div>
     </div>
   </div>
@@ -260,14 +207,40 @@
 </div>
 
 <!-- ════════════════════════════════════════════════
-     TAB 2 — ÚLTIMAS RESPUESTAS
+     TAB 2 — WHATSAPP POR INTEGRANTE
+════════════════════════════════════════════════ -->
+<div id="tab-equipo" style="display:none">
+
+  <div class="card mb24">
+    <p class="section-title">Consultas por integrante (WhatsApp)</p>
+    <div class="chart-wrap" style="height:220px">
+      <canvas id="chartTeam" role="img" aria-label="Consultas por integrante en WhatsApp"></canvas>
+    </div>
+  </div>
+
+  <div style="overflow-x:auto">
+    <table>
+      <thead>
+        <tr>
+          <th>Integrante</th><th>Consultas</th><th>Latencia promedio</th>
+          <th>TTFT promedio</th><th>Fallback</th><th>Feedback positivo</th><th>Última consulta</th>
+        </tr>
+      </thead>
+      <tbody id="teamBody"></tbody>
+    </table>
+  </div>
+
+</div>
+
+<!-- ════════════════════════════════════════════════
+     TAB 4 — CONSULTAR EN VIVO
 ════════════════════════════════════════════════ -->
 <div id="tab-consultar" style="display:none">
 
   <div class="card mb16" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
     <div>
-      <p class="section-title" style="margin-bottom:4px">Últimas respuestas desde ARCO</p>
-      <p style="font-size:13px;color:var(--muted)">Se muestran automáticamente las respuestas más recientes de cada modelo.</p>
+      <p class="section-title" style="margin-bottom:4px">Última respuesta desde ARCO</p>
+      <p style="font-size:13px;color:var(--muted)">Se muestra automáticamente la respuesta más reciente (web o WhatsApp).</p>
     </div>
     <button class="btn"
             style="background:#f1f5f9;color:#475569;border:1px solid #cbd5e1;font-size:13px"
@@ -281,98 +254,43 @@
     <p id="lastQueryText" style="font-size:14px;margin-top:6px;color:var(--text)"></p>
   </div>
 
-  <div class="consultor mb16" id="responsePanels">
-    <div class="response-panel granite-panel card">
-      <div class="panel-header">
-        <span class="panel-title"><span class="badge badge-g">Granite</span></span>
-        <span class="meta-pill" id="g-meta"></span>
-      </div>
-      <div id="g-response" class="response-empty">Sin respuestas aún. Envía una consulta desde index.html.</div>
-      <div class="feedback-btns" id="g-fb-btns" style="display:none">
-        <button class="fb-btn" onclick="sendFeedback('granite', 1.0, this)">👍 Útil</button>
-        <button class="fb-btn" onclick="sendFeedback('granite', 0.5, this)">🤔 Neutral</button>
-        <button class="fb-btn" onclick="sendFeedback('granite', 0.0, this)">👎 No útil</button>
-      </div>
+  <div class="response-panel card mb16" id="responsePanel">
+    <div class="panel-header">
+      <span class="panel-title"><span class="badge badge-web" id="r-channel-badge">Web</span></span>
+      <span class="meta-pill" id="r-meta"></span>
     </div>
-    <div class="response-panel qwen-panel card">
-      <div class="panel-header">
-        <span class="panel-title"><span class="badge badge-q">Qwen</span></span>
-        <span class="meta-pill" id="q-meta"></span>
-      </div>
-      <div id="q-response" class="response-empty">Sin respuestas aún. Envía una consulta desde index.html.</div>
-      <div class="feedback-btns" id="q-fb-btns" style="display:none">
-        <button class="fb-btn" onclick="sendFeedback('qwen', 1.0, this)">👍 Útil</button>
-        <button class="fb-btn" onclick="sendFeedback('qwen', 0.5, this)">🤔 Neutral</button>
-        <button class="fb-btn" onclick="sendFeedback('qwen', 0.0, this)">👎 No útil</button>
-      </div>
+    <div id="r-response" class="response-empty">Sin respuestas aún. Envía una consulta desde index.html o WhatsApp.</div>
+    <div class="feedback-btns" id="r-fb-btns" style="display:none">
+      <button class="fb-btn" onclick="sendFeedback(1.0, this)">👍 Útil</button>
+      <button class="fb-btn" onclick="sendFeedback(0.5, this)">🤔 Neutral</button>
+      <button class="fb-btn" onclick="sendFeedback(0.0, this)">👎 No útil</button>
     </div>
   </div>
 
-  <!-- Stats por consulta -->
-  <div id="queryStatsSection" style="display:none">
-    <div class="grid-2 mb16">
-      <div class="card">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
-          <span class="badge badge-g">Granite</span>
-          <span class="card-title" style="margin:0" id="qs-g-tramite"></span>
-        </div>
-        <div class="metric-row"><span class="label">Latencia</span><span class="val" id="qs-g-lat">—</span></div>
-        <div class="metric-row"><span class="label">Tokens totales</span><span class="val" id="qs-g-tok">—</span></div>
-        <div class="metric-row"><span class="label">Fallback</span><span class="val" id="qs-g-fb">—</span></div>
-      </div>
-      <div class="card">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
-          <span class="badge badge-q">Qwen</span>
-          <span class="card-title" style="margin:0" id="qs-q-tramite"></span>
-        </div>
-        <div class="metric-row"><span class="label">Latencia</span><span class="val" id="qs-q-lat">—</span></div>
-        <div class="metric-row"><span class="label">Tokens totales</span><span class="val" id="qs-q-tok">—</span></div>
-        <div class="metric-row"><span class="label">Fallback</span><span class="val" id="qs-q-fb">—</span></div>
-      </div>
-    </div>
-
-    <div class="card">
-      <p class="section-title" style="margin-bottom:12px">Comparación directa — esta consulta</p>
-      <div class="bar-group">
-        <div class="bar-label">Latencia (ms) — menor es mejor</div>
-        <div class="bar-row">
-          <div class="bar-name">Granite</div>
-          <div class="bar-track"><div class="bar-fill bar-g" id="qs-bar-g-lat" style="width:0%">—</div></div>
-        </div>
-        <div class="bar-row">
-          <div class="bar-name">Qwen</div>
-          <div class="bar-track"><div class="bar-fill bar-q" id="qs-bar-q-lat" style="width:0%">—</div></div>
-        </div>
-      </div>
-      <div class="bar-group" style="margin-bottom:0">
-        <div class="bar-label">Tokens totales — menor es mejor</div>
-        <div class="bar-row">
-          <div class="bar-name">Granite</div>
-          <div class="bar-track"><div class="bar-fill bar-g" id="qs-bar-g-tok" style="width:0%">—</div></div>
-        </div>
-        <div class="bar-row">
-          <div class="bar-name">Qwen</div>
-          <div class="bar-track"><div class="bar-fill bar-q" id="qs-bar-q-tok" style="width:0%">—</div></div>
-        </div>
-      </div>
-    </div>
+  <div class="card" id="queryStatsSection" style="display:none">
+    <p class="section-title">Métricas de esta consulta</p>
+    <div class="metric-row"><span class="label">Trámite</span><span class="val" id="qs-tramite">—</span></div>
+    <div class="metric-row"><span class="label">Latencia total</span><span class="val" id="qs-lat">—</span></div>
+    <div class="metric-row"><span class="label">TTFT</span><span class="val" id="qs-ttft">—</span></div>
+    <div class="metric-row"><span class="label">Tokens totales</span><span class="val" id="qs-tok">—</span></div>
+    <div class="metric-row"><span class="label">Fallback</span><span class="val" id="qs-fb">—</span></div>
   </div>
 
 </div>
 
 <!-- ════════════════════════════════════════════════
-     TAB 3 — HISTORIAL
+     TAB 5 — HISTORIAL
 ════════════════════════════════════════════════ -->
 <div id="tab-historial" style="display:none">
   <div class="card mb16" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:14px 20px">
     <input type="text" id="histSearch" placeholder="Buscar consulta o trámite…"
            style="padding:7px 14px;border:1px solid var(--border);border-radius:30px;font-size:13px;outline:none;flex:1;min-width:180px"
            oninput="filterHistory()">
-    <select id="histModel" onchange="filterHistory()"
+    <select id="histChannel" onchange="filterHistory()"
             style="padding:7px 12px;border:1px solid var(--border);border-radius:30px;font-size:13px">
-      <option value="">Todos los modelos</option>
-      <option value="granite">Granite</option>
-      <option value="qwen">Qwen</option>
+      <option value="">Todos los canales</option>
+      <option value="web">Web</option>
+      <option value="whatsapp">WhatsApp</option>
     </select>
     <select id="histFallback" onchange="filterHistory()"
             style="padding:7px 12px;border:1px solid var(--border);border-radius:30px;font-size:13px">
@@ -385,8 +303,8 @@
     <table>
       <thead>
         <tr>
-          <th>Fecha</th><th>Modelo</th><th>Trámite</th><th>Consulta</th>
-          <th>Latencia</th><th>Tokens</th><th>Fallback</th><th>Feedback</th>
+          <th>Fecha</th><th>Canal</th><th>Integrante</th><th>Trámite</th><th>Consulta</th>
+          <th>Latencia</th><th>TTFT</th><th>Tokens</th><th>Fallback</th><th>Feedback</th>
         </tr>
       </thead>
       <tbody id="histBody"></tbody>
@@ -396,55 +314,21 @@
 
 <script>
 const API = "http://127.0.0.1:8000";
-let allMetrics    = [];
-let timelineData  = {};
-let traceIds      = { granite: null, qwen: null };
-let feedbackState = { granite: { traceId: null, score: null }, qwen: { traceId: null, score: null } };
-let chartLatency, chartFeedback;
-function computeCompare(metrics) {
-  const defs = { granite: 'Granite-4.0-1B', qwen: 'Qwen2.5-1.5B' };
-  const result = {};
-  for (const [key, label] of Object.entries(defs)) {
-    const sub = metrics.filter(m => m.model_key === key);
-    if (!sub.length) {
-      result[key] = { label, total_consultas: 0, promedio_latencia_ms: 0,
-        p95_latencia_ms: 0, total_tokens: 0, tokens_por_consulta: 0,
-        tasa_fallback: 0, feedback_positivos: 0, feedback_negativos: 0,
-        feedback_neutral: 0, pct_feedback_positivo: 0 };
-      continue;
-    }
-    const lats   = sub.map(m => m.latency_ms || 0).sort((a, b) => a - b);
-    const p95    = lats[Math.max(0, Math.floor(lats.length * 0.95) - 1)] || 0;
-    const avgLat = lats.reduce((s, v) => s + v, 0) / lats.length;
-    const totTok = sub.reduce((s, m) => s + (m.total_tokens || 0), 0);
-    const falls  = sub.filter(m => m.fallback).length;
-    const fbSub  = sub.filter(m => m.feedback);
-    const pos    = fbSub.filter(m => m.feedback.score >= 0.8).length;
-    const neg    = fbSub.filter(m => m.feedback.score <= 0.2).length;
-    result[key]  = {
-      label,
-      total_consultas:       sub.length,
-      promedio_latencia_ms:  Math.round(avgLat * 10) / 10,
-      p95_latencia_ms:       Math.round(p95    * 10) / 10,
-      total_tokens:          totTok,
-      tokens_por_consulta:   Math.round(totTok / sub.length * 10) / 10,
-      tasa_fallback:         Math.round(falls / sub.length * 1000) / 10,
-      feedback_positivos:    pos,
-      feedback_negativos:    neg,
-      feedback_neutral:      fbSub.length - pos - neg,
-      pct_feedback_positivo: fbSub.length ? Math.round(pos / fbSub.length * 1000) / 10 : 0,
-    };
-  }
-  return result;
-}
+let allMetrics   = [];
+let statsGlobal  = null;
+let statsTeam    = null;
+let lastTraceId  = null;
+let feedbackState = {};
+let chartLatency, chartChannels, chartTeam, chartTramites, chartFeedback;
 
 /* ── Tab switching ── */
 async function showTab(name) {
-  ['comparar','consultar','historial'].forEach(t => {
+  const tabs = ['resumen','equipo','consultar','historial'];
+  tabs.forEach(t => {
     document.getElementById('tab-' + t).style.display = t === name ? '' : 'none';
   });
   document.querySelectorAll('.tab').forEach((el, i) => {
-    el.classList.toggle('active', ['comparar','consultar','historial'][i] === name);
+    el.classList.toggle('active', tabs[i] === name);
   });
   await loadAll();
   if (name === 'historial') renderHistory();
@@ -453,13 +337,20 @@ async function showTab(name) {
 /* ── Fetch data ── */
 async function loadAll() {
   try {
-    const [metrics] = await Promise.all([
+    const [metrics, stats, team] = await Promise.all([
       fetch(`${API}/metrics`).then(r => r.json()),
+      fetch(`${API}/stats`).then(r => r.json()),
+      fetch(`${API}/stats/whatsapp`).then(r => r.json()),
     ]);
-    allMetrics = Array.isArray(metrics) ? metrics : [];
-    renderCompare();
+    allMetrics    = Array.isArray(metrics) ? metrics : [];
+    statsGlobal   = stats && !stats.error ? stats : null;
+    statsTeam     = team || {};
+
+    renderSummary();
     renderCharts();
-    renderLastResponses();
+    renderTeam();
+    renderLastResponse();
+
     document.getElementById('lastUpdated').textContent =
       'Última actualización: ' + new Date().toLocaleTimeString('es-CL');
   } catch(e) {
@@ -467,69 +358,33 @@ async function loadAll() {
   }
 }
 
-/* ── Render compare cards ── */
-function renderCompare() {
-  const data = computeCompare(allMetrics);
-  const g = data.granite || {};
-  const q = data.qwen    || {};
-
-  setText('g-consultas', g.total_consultas ?? '—');
-  setText('g-lat',  fms(g.promedio_latencia_ms));
-  setText('g-p95',  fms(g.p95_latencia_ms));
-  setText('g-tok',  g.tokens_por_consulta ?? '—');
-  setText('g-fb',   fpct(g.tasa_fallback));
-  setText('g-pos',  fpct(g.pct_feedback_positivo));
-
-  setText('q-consultas', q.total_consultas ?? '—');
-  setText('q-lat',  fms(q.promedio_latencia_ms));
-  setText('q-p95',  fms(q.p95_latencia_ms));
-  setText('q-tok',  q.tokens_por_consulta ?? '—');
-  setText('q-fb',   fpct(q.tasa_fallback));
-  setText('q-pos',  fpct(q.pct_feedback_positivo));
-
-  /* barras — latencia (menor=mejor → invertir) */
-  const gLat = g.promedio_latencia_ms || 0;
-  const qLat = q.promedio_latencia_ms || 0;
-  const maxLat = Math.max(gLat, qLat, 1);
-  setBar('bar-g-lat', gLat / maxLat * 100, fms(gLat));
-  setBar('bar-q-lat', qLat / maxLat * 100, fms(qLat));
-
-  const gTok = g.tokens_por_consulta || 0;
-  const qTok = q.tokens_por_consulta || 0;
-  const maxTok = Math.max(gTok, qTok, 1);
-  setBar('bar-g-tok', gTok / maxTok * 100, gTok);
-  setBar('bar-q-tok', qTok / maxTok * 100, qTok);
-
-  const gPos = g.pct_feedback_positivo || 0;
-  const qPos = q.pct_feedback_positivo || 0;
-  setBar('bar-g-pos', gPos, fpct(gPos));
-  setBar('bar-q-pos', qPos, fpct(qPos));
-
-  const gFb = g.tasa_fallback || 0;
-  const qFb = q.tasa_fallback || 0;
-  const maxFb = Math.max(gFb, qFb, 1);
-  setBar('bar-g-fb', gFb / maxFb * 100, fpct(gFb));
-  setBar('bar-q-fb', qFb / maxFb * 100, fpct(qFb));
+/* ── Tab 1: resumen ── */
+function renderSummary() {
+  const s = statsGlobal;
+  if (!s) return;
+  setText('s-total', s.total_consultas ?? '—');
+  setText('s-total-sub', `Web: ${s.consultas_web ?? 0} · WhatsApp: ${s.consultas_whatsapp ?? 0}`);
+  setText('s-lat', fms(s.promedio_latencia_ms));
+  setText('s-lat-p95', `p95: ${fms(s.p95_latencia_ms)}`);
+  setText('s-ttft', fms(s.promedio_ttft_ms));
+  setText('s-ttft-p95', `p95: ${fms(s.p95_ttft_ms)}`);
+  setText('s-fb', fpct(s.tasa_fallback));
+  setText('s-model', s.modelo_activo || '—');
 }
 
 /* ── Charts ── */
 function renderCharts() {
   renderLatencyChart();
+  renderChannelsChart();
+  renderTramitesChart();
   renderFeedbackChart();
 }
 
 function renderLatencyChart() {
-  const gRaw = allMetrics.filter(m => m.model_key === 'granite')
-    .sort((a, b) => a.timestamp.localeCompare(b.timestamp)).slice(-20);
-  const qRaw = allMetrics.filter(m => m.model_key === 'qwen')
-    .sort((a, b) => a.timestamp.localeCompare(b.timestamp)).slice(-20);
-  const gData = gRaw.map(m => ({ x: m.timestamp.slice(11,19), y: m.latency_ms }));
-  const qData = qRaw.map(m => ({ x: m.timestamp.slice(11,19), y: m.latency_ms }));
-
-  const labels = [...new Set([
-    ...gRaw.map(m => m.timestamp.slice(11,19)),
-    ...qRaw.map(m => m.timestamp.slice(11,19)),
-  ])].sort().slice(-20);
+  const sorted = [...allMetrics].sort((a,b) => a.timestamp.localeCompare(b.timestamp)).slice(-30);
+  const labels = sorted.map(m => (m.timestamp||'').slice(11,19));
+  const latData = sorted.map(m => m.latency_ms || null);
+  const ttftData = sorted.map(m => m.ttft_ms || null);
 
   if (chartLatency) chartLatency.destroy();
   chartLatency = new Chart(document.getElementById('chartLatency'), {
@@ -538,14 +393,13 @@ function renderLatencyChart() {
       labels,
       datasets: [
         {
-          label: 'Granite', data: gData.slice(-20).map(d => d.y),
-          borderColor: '#378ADD', backgroundColor: '#E6F1FB',
+          label: 'Latencia total', data: latData,
+          borderColor: '#2a78d6', backgroundColor: '#E6F1FB',
           borderWidth: 2, pointRadius: 3, tension: 0.3, fill: false,
-          borderDash: [],
         },
         {
-          label: 'Qwen', data: qData.slice(-20).map(d => d.y),
-          borderColor: '#639922', backgroundColor: '#EAF3DE',
+          label: 'TTFT', data: ttftData,
+          borderColor: '#eb6834', backgroundColor: '#FCEBE2',
           borderWidth: 2, pointRadius: 3, tension: 0.3, fill: false,
           borderDash: [5, 3],
         },
@@ -562,122 +416,201 @@ function renderLatencyChart() {
   });
 }
 
+function renderChannelsChart() {
+  const web = allMetrics.filter(m => m.channel === 'web').length;
+  const wa  = allMetrics.filter(m => m.channel === 'whatsapp').length;
+
+  if (chartChannels) chartChannels.destroy();
+  chartChannels = new Chart(document.getElementById('chartChannels'), {
+    type: 'doughnut',
+    data: {
+      labels: ['Web', 'WhatsApp'],
+      datasets: [{
+        data: [web, wa],
+        backgroundColor: ['#2a78d6', '#008300'],
+        borderColor: '#ffffff', borderWidth: 2,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+    },
+  });
+}
+
+function renderTramitesChart() {
+  const counts = {};
+  allMetrics.forEach(m => {
+    const nombre = m.tramite || 'Sin identificar';
+    counts[nombre] = (counts[nombre] || 0) + 1;
+  });
+  const ranked = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  const labels = ranked.map(r => r[0]);
+  const values = ranked.map(r => r[1]);
+
+  if (chartTramites) chartTramites.destroy();
+  chartTramites = new Chart(document.getElementById('chartTramites'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Consultas',
+        data: values,
+        backgroundColor: '#E6F1FB', borderColor: '#2a78d6', borderWidth: 1, borderRadius: 4,
+      }],
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { font: { size: 10 }, precision: 0 } },
+        y: { ticks: { font: { size: 11 } } },
+      },
+    },
+  });
+}
+
 function renderFeedbackChart() {
-  const data = computeCompare(allMetrics);
-  const g = data.granite || {};
-  const q = data.qwen    || {};
+  const s = statsGlobal || {};
+  const pos = s.feedback_positivos || 0;
+  const neu = s.feedback_neutral || 0;
+  const neg = s.feedback_negativos || 0;
+  const total = pos + neu + neg;
+
+  const legend = document.getElementById('feedbackLegend');
+  if (legend) {
+    if (!total) {
+      legend.innerHTML = '<span style="color:var(--muted)">Aún no hay feedback registrado</span>';
+    } else {
+      const pct = n => Math.round(n / total * 100);
+      legend.innerHTML = `
+        <span><span class="dot" style="background:var(--fb-pos)"></span>Positivo ${pct(pos)}% (${pos})</span>
+        <span><span class="dot" style="background:var(--fb-neu)"></span>Neutral ${pct(neu)}% (${neu})</span>
+        <span><span class="dot" style="background:var(--fb-neg)"></span>Negativo ${pct(neg)}% (${neg})</span>
+      `;
+    }
+  }
 
   if (chartFeedback) chartFeedback.destroy();
   chartFeedback = new Chart(document.getElementById('chartFeedback'), {
-    type: 'bar',
+    type: 'doughnut',
     data: {
       labels: ['Positivo', 'Neutral', 'Negativo'],
-      datasets: [
-        {
-          label: 'Granite',
-          data: [g.feedback_positivos||0, g.feedback_neutral||0, g.feedback_negativos||0],
-          backgroundColor: '#B5D4F4', borderColor: '#378ADD', borderWidth: 1,
-        },
-        {
-          label: 'Qwen',
-          data: [q.feedback_positivos||0, q.feedback_neutral||0, q.feedback_negativos||0],
-          backgroundColor: '#C0DD97', borderColor: '#639922', borderWidth: 1,
-        },
-      ],
+      datasets: [{
+        data: total ? [pos, neu, neg] : [1],
+        backgroundColor: total ? ['#008300', '#eda100', '#e34948'] : ['#e2e8f0'],
+        borderColor: '#ffffff', borderWidth: 2,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+    },
+  });
+}
+
+/* ── Tab 2: equipo (WhatsApp por integrante) ── */
+function renderTeam() {
+  const team = statsTeam || {};
+  const nombres = Object.keys(team);
+
+  if (chartTeam) chartTeam.destroy();
+  chartTeam = new Chart(document.getElementById('chartTeam'), {
+    type: 'bar',
+    data: {
+      labels: nombres,
+      datasets: [{
+        label: 'Consultas',
+        data: nombres.map(n => team[n].total_consultas || 0),
+        backgroundColor: '#E6F1FB', borderColor: '#2a78d6', borderWidth: 1, borderRadius: 4,
+      }],
     },
     options: {
       responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: false } },
       scales: {
         x: { ticks: { font: { size: 11 } } },
-        y: { ticks: { font: { size: 11 }, stepSize: 1 } },
+        y: { ticks: { font: { size: 11 }, precision: 0 } },
       },
     },
   });
+
+  const tbody = document.getElementById('teamBody');
+  tbody.innerHTML = '';
+  if (!nombres.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:24px">Sin consultas de WhatsApp aún</td></tr>';
+    return;
+  }
+  nombres.sort((x,y) => (team[y].total_consultas||0) - (team[x].total_consultas||0)).forEach(nombre => {
+    const t = team[nombre];
+    const tr = tbody.insertRow();
+    tr.insertCell(0).textContent = nombre;
+    tr.insertCell(1).textContent = t.total_consultas ?? 0;
+    tr.insertCell(2).textContent = fms(t.promedio_latencia_ms);
+    tr.insertCell(3).textContent = fms(t.promedio_ttft_ms);
+    tr.insertCell(4).textContent = fpct(t.tasa_fallback);
+    tr.insertCell(5).textContent = fpct(t.pct_feedback_positivo);
+    tr.insertCell(6).textContent = (t.ultima_consulta||'').slice(0,16).replace('T',' ') || '—';
+  });
 }
 
-/* ── Últimas respuestas desde index.html ── */
-function renderLastResponses() {
-  const sorted  = [...allMetrics].reverse();
-  const granite = sorted.find(m => m.model_key === 'granite');
-  const qwen    = sorted.find(m => m.model_key === 'qwen');
+/* ── Tab 4: consultar en vivo ── */
+function renderLastResponse() {
+  const sorted = [...allMetrics].reverse();
+  const last = sorted[0];
 
-  const lastEntry = granite || qwen;
   const queryCard = document.getElementById('lastQueryCard');
-  if (lastEntry) {
-    queryCard.style.display = '';
-    document.getElementById('lastQueryText').textContent = lastEntry.user_query || '';
-  } else {
+  if (!last) {
     queryCard.style.display = 'none';
+    return;
   }
+  queryCard.style.display = '';
+  document.getElementById('lastQueryText').textContent = last.user_query || '';
 
-  if (granite) {
-    traceIds.granite = granite.trace_id;
-    const meta = `${Math.round(granite.latency_ms ?? 0)} ms · ${granite.total_tokens ?? 0} tok · ${granite.fallback ? '⚠️ fallback' : '✅'}`;
-    const gScore = granite.feedback?.score ?? (feedbackState.granite.traceId === granite.trace_id ? feedbackState.granite.score : null);
-    setPanel('granite', granite.respuesta || '—', meta, true, gScore);
-  }
-  if (qwen) {
-    traceIds.qwen = qwen.trace_id;
-    const meta = `${Math.round(qwen.latency_ms ?? 0)} ms · ${qwen.total_tokens ?? 0} tok · ${qwen.fallback ? '⚠️ fallback' : '✅'}`;
-    const qScore = qwen.feedback?.score ?? (feedbackState.qwen.traceId === qwen.trace_id ? feedbackState.qwen.score : null);
-    setPanel('qwen', qwen.respuesta || '—', meta, true, qScore);
-  }
+  lastTraceId = last.trace_id;
+  const isWa = last.channel === 'whatsapp';
+  const badge = document.getElementById('r-channel-badge');
+  badge.textContent = isWa ? (last.integrante ? `WhatsApp · ${last.integrante}` : 'WhatsApp') : 'Web';
+  badge.className = 'badge ' + (isWa ? 'badge-wa' : 'badge-web');
 
-  renderQueryStats(granite, qwen);
+  const meta = `${Math.round(last.latency_ms ?? 0)} ms` +
+    (last.ttft_ms ? ` · TTFT ${Math.round(last.ttft_ms)} ms` : '') +
+    ` · ${last.total_tokens ?? 0} tok · ${last.fallback ? '⚠️ fallback' : '✅'}`;
+
+  const score = last.feedback?.score ?? (feedbackState[last.trace_id] ?? null);
+  setPanel(last.respuesta || '—', meta, true, score);
+
+  renderQueryStats(last);
 }
 
-/* ── Limpiar tab Consultar en vivo ── */
 function clearConsultar() {
-  document.getElementById('lastQueryCard').style.display   = 'none';
+  document.getElementById('lastQueryCard').style.display = 'none';
   document.getElementById('queryStatsSection').style.display = 'none';
-  setPanel('granite', 'Sin respuestas aún. Envía una consulta desde index.html.', '', false);
-  setPanel('qwen',    'Sin respuestas aún. Envía una consulta desde index.html.', '', false);
-  traceIds = { granite: null, qwen: null };
+  setPanel('Sin respuestas aún. Envía una consulta desde index.html o WhatsApp.', '', false);
+  lastTraceId = null;
 }
 
-/* ── Stats por consulta (tab Consultar en vivo) ── */
-function renderQueryStats(granite, qwen) {
+function renderQueryStats(m) {
   const section = document.getElementById('queryStatsSection');
-  if (!granite && !qwen) { section.style.display = 'none'; return; }
+  if (!m) { section.style.display = 'none'; return; }
   section.style.display = '';
-
-  if (granite) {
-    setText('qs-g-tramite', granite.tramite || '');
-    setText('qs-g-lat', fms(granite.latency_ms));
-    setText('qs-g-tok', granite.total_tokens ?? '—');
-    setText('qs-g-fb',  granite.fallback ? '⚠️ Sí' : '✅ No');
-  }
-  if (qwen) {
-    setText('qs-q-tramite', qwen.tramite || '');
-    setText('qs-q-lat', fms(qwen.latency_ms));
-    setText('qs-q-tok', qwen.total_tokens ?? '—');
-    setText('qs-q-fb',  qwen.fallback ? '⚠️ Sí' : '✅ No');
-  }
-
-  const gLat   = granite?.latency_ms   || 0;
-  const qLat   = qwen?.latency_ms      || 0;
-  const maxLat = Math.max(gLat, qLat, 1);
-  setBar('qs-bar-g-lat', gLat / maxLat * 100, fms(gLat));
-  setBar('qs-bar-q-lat', qLat / maxLat * 100, fms(qLat));
-
-  const gTok   = granite?.total_tokens || 0;
-  const qTok   = qwen?.total_tokens    || 0;
-  const maxTok = Math.max(gTok, qTok, 1);
-  setBar('qs-bar-g-tok', gTok / maxTok * 100, gTok);
-  setBar('qs-bar-q-tok', qTok / maxTok * 100, qTok);
+  setText('qs-tramite', m.tramite || '—');
+  setText('qs-lat', fms(m.latency_ms));
+  setText('qs-ttft', fms(m.ttft_ms));
+  setText('qs-tok', m.total_tokens ?? '—');
+  setText('qs-fb', m.fallback ? '⚠️ Sí' : '✅ No');
 }
 
-function setPanel(model, text, meta, showFeedback, feedbackScore) {
-  const isG = model === 'granite';
-  const el  = document.getElementById(isG ? 'g-response' : 'q-response');
-  const mt  = document.getElementById(isG ? 'g-meta'     : 'q-meta');
-  const fb  = document.getElementById(isG ? 'g-fb-btns'  : 'q-fb-btns');
+function setPanel(text, meta, showFeedback, feedbackScore) {
+  const el = document.getElementById('r-response');
+  const mt = document.getElementById('r-meta');
+  const fb = document.getElementById('r-fb-btns');
   el.className = 'response-text';
   el.innerHTML = text;
   mt.textContent = meta;
   if (fb) {
-    const btns  = fb.querySelectorAll('.fb-btn');
+    const btns = fb.querySelectorAll('.fb-btn');
     const scores = [1.0, 0.5, 0.0];
     btns.forEach(b => b.classList.remove('selected-pos', 'selected-neg'));
     if (feedbackScore != null) {
@@ -692,16 +625,15 @@ function setPanel(model, text, meta, showFeedback, feedbackScore) {
   }
 }
 
-async function sendFeedback(modelKey, score, btn) {
-  const tid = traceIds[modelKey];
-  if (!tid) return;
+async function sendFeedback(score, btn) {
+  if (!lastTraceId) return;
   try {
     await fetch(`${API}/feedback`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ trace_id: tid, model: modelKey, score }),
+      body: JSON.stringify({ trace_id: lastTraceId, score }),
     });
-    feedbackState[modelKey] = { traceId: tid, score };
+    feedbackState[lastTraceId] = score;
     const container = btn.closest('.feedback-btns');
     container.querySelectorAll('.fb-btn').forEach(b => b.classList.remove('selected-pos','selected-neg'));
     const cls = score >= 0.8 ? 'selected-pos' : score <= 0.2 ? 'selected-neg' : null;
@@ -709,52 +641,54 @@ async function sendFeedback(modelKey, score, btn) {
   } catch(e) { console.error(e); }
 }
 
-/* ── Historial ── */
+/* ── Tab 5: historial ── */
 function renderHistory() {
   filterHistory();
 }
 
 function filterHistory() {
   const search   = document.getElementById('histSearch').value.toLowerCase();
-  const model    = document.getElementById('histModel').value;
+  const channel  = document.getElementById('histChannel').value;
   const fallback = document.getElementById('histFallback').value;
 
   const filtered = allMetrics.filter(m => {
-    const matchSearch = (m.user_query||'').toLowerCase().includes(search) ||
-                        (m.tramite||'').toLowerCase().includes(search);
-    const matchModel  = !model || m.model_key === model;
-    const matchFb     = !fallback ||
-                        (fallback === 'ok'  && !m.fallback) ||
-                        (fallback === 'err' &&  m.fallback);
-    return matchSearch && matchModel && matchFb;
+    const matchSearch  = (m.user_query||'').toLowerCase().includes(search) ||
+                         (m.tramite||'').toLowerCase().includes(search);
+    const matchChannel = !channel || m.channel === channel;
+    const matchFb       = !fallback ||
+                         (fallback === 'ok'  && !m.fallback) ||
+                         (fallback === 'err' &&  m.fallback);
+    return matchSearch && matchChannel && matchFb;
   });
 
   const tbody = document.getElementById('histBody');
   tbody.innerHTML = '';
 
   if (!filtered.length) {
-    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px">Sin resultados</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:24px">Sin resultados</td></tr>';
     return;
   }
 
   [...filtered].reverse().forEach(m => {
     const tr = tbody.insertRow();
     tr.insertCell(0).textContent = (m.timestamp||'').slice(0,16).replace('T',' ');
-    const modelCell = tr.insertCell(1);
-    modelCell.innerHTML = m.model_key === 'granite'
-      ? '<span class="badge badge-g">Granite</span>'
-      : '<span class="badge badge-q">Qwen</span>';
-    tr.insertCell(2).textContent = m.tramite || '—';
-    const qCell = tr.insertCell(3);
+    const chCell = tr.insertCell(1);
+    chCell.innerHTML = m.channel === 'whatsapp'
+      ? '<span class="badge badge-wa">WhatsApp</span>'
+      : '<span class="badge badge-web">Web</span>';
+    tr.insertCell(2).textContent = m.integrante || '—';
+    tr.insertCell(3).textContent = m.tramite || '—';
+    const qCell = tr.insertCell(4);
     qCell.style.maxWidth = '200px';
     qCell.innerHTML = `<span title="${esc(m.user_query)}">${trunc(m.user_query, 55)}</span>`;
-    tr.insertCell(4).textContent = m.latency_ms ? Math.round(m.latency_ms) + ' ms' : '—';
-    tr.insertCell(5).textContent = m.total_tokens || 0;
-    const fbCell = tr.insertCell(6);
+    tr.insertCell(5).textContent = m.latency_ms ? Math.round(m.latency_ms) + ' ms' : '—';
+    tr.insertCell(6).textContent = m.ttft_ms ? Math.round(m.ttft_ms) + ' ms' : '—';
+    tr.insertCell(7).textContent = m.total_tokens || 0;
+    const fbCell = tr.insertCell(8);
     fbCell.innerHTML = m.fallback
       ? '<span class="badge badge-err">⚠️ Sí</span>'
       : '<span class="badge badge-ok">✅ No</span>';
-    const feedCell = tr.insertCell(7);
+    const feedCell = tr.insertCell(9);
     if (m.feedback) {
       const s = m.feedback.score;
       feedCell.textContent = s >= 0.8 ? '👍 Útil' : s <= 0.2 ? '👎 No útil' : '🤔 Neutral';
@@ -764,35 +698,12 @@ function filterHistory() {
   });
 }
 
-/* ── Leyenda manual para charts ── */
-function buildLegend() {
-  return `
-    <div style="display:flex;gap:16px;font-size:12px;color:var(--muted);margin-bottom:8px">
-      <span style="display:flex;align-items:center;gap:5px">
-        <span style="width:20px;height:3px;background:#378ADD;display:inline-block;border-radius:2px"></span>Granite
-      </span>
-      <span style="display:flex;align-items:center;gap:5px">
-        <span style="width:20px;height:3px;background:#639922;display:inline-block;border-radius:2px;border-top:2px dashed #639922"></span>Qwen
-      </span>
-    </div>`;
-}
-
-document.querySelectorAll('.section-title').forEach((el, i) => {
-  if (i === 0) el.insertAdjacentHTML('afterend', buildLegend());
-});
-
 /* ── Helpers ── */
 function setText(id, val) {
   const el = document.getElementById(id);
   if (el) el.textContent = val;
 }
-function setBar(id, pct, label) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.style.width = Math.min(Math.max(pct, 0), 100) + '%';
-  el.textContent = label;
-}
-function fms(v) { return v != null ? Math.round(v) + ' ms' : '—'; }
+function fms(v) { return v != null && v !== 0 ? Math.round(v) + ' ms' : (v === 0 ? '0 ms' : '—'); }
 function fpct(v) { return v != null ? v + '%' : '—'; }
 function trunc(s, n) { return s && s.length > n ? s.slice(0,n) + '…' : (s||''); }
 function esc(s) {

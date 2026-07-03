@@ -243,6 +243,46 @@
       cursor: wait;
     }
 
+    .feedback-btns {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px solid #d9e2ec;
+    }
+
+    .fb-btn {
+      padding: 4px 12px;
+      border: 1px solid #cfd8e3;
+      border-radius: 20px;
+      font-size: 12px;
+      cursor: pointer;
+      background: white;
+      color:black;
+    }
+
+    .fb-btn:hover {
+      background: #f4f7fb;
+    }
+
+    .fb-btn.selected-pos {
+      background: #dcfce7;
+      border-color: #166534;
+      color: #166534;
+    }
+
+    .fb-btn.selected-neg {
+      background: #fee2e2;
+      border-color: #991b1b;
+      color: #991b1b;
+    }
+
+    .fb-thanks {
+      font-size: 12px;
+      color: #555;
+      margin-top: 8px;
+    }
+
     .loading-skeleton {
       padding: 14px;
       border-radius: 12px;
@@ -270,11 +310,7 @@
     <p class="subtitle">Asistente para el Registro Civil y su Orientación</p>
 
     <div class="model-selector">
-      <label for="modelSelect">Modelo:</label>
-      <select id="modelSelect">
-        <option value="granite">Granite-4.0-1B (IBM)</option>
-        <option value="qwen">Qwen2.5-3B (Alibaba)</option>
-      </select>
+      <span id="modelLabel">Modelo: cargando…</span>
     </div>
 
     <div class="chat-box" id="chatBox">
@@ -295,21 +331,21 @@
 
     const askButton  = document.getElementById("askButton");
     const queryInput = document.getElementById("query");
-    const modelSelect = document.getElementById("modelSelect");
+    const modelLabelEl = document.getElementById("modelLabel");
     const chatBox    = document.getElementById("chatBox");
 
     const history = [];
     let currentContext = null;
 
-    const MODEL_LABELS = {
-      granite: "Granite-4.0-1B",
-      qwen:    "Qwen2.5-3B",
-    };
-
-    const MODEL_BADGE_CLASS = {
-      granite: "badge-granite",
-      qwen:    "badge-qwen",
-    };
+    fetch(`${BENCHMARK_API}/models`)
+      .then(r => r.json())
+      .then(data => {
+        modelLabelEl.textContent = `Modelo: ${data.label || "desconocido"}` +
+          (data.cargado ? "" : " (no cargado)");
+      })
+      .catch(() => {
+        modelLabelEl.textContent = "Modelo: no se pudo conectar con el backend";
+      });
 
     function addMessage(role, htmlContent) {
       const message = document.createElement("div");
@@ -337,9 +373,14 @@
         .replace(/>/g, "&gt;");
     }
 
-    function buildAssistantHtml(data, modelKey) {
-      const label      = data.fallback ? "Fallback" : (MODEL_LABELS[modelKey] || modelKey);
-      const badgeClass = data.fallback ? "badge-fallback" : (MODEL_BADGE_CLASS[modelKey] || "");
+    function buildAssistantHtml(data) {
+      const label      = data.fallback ? "Fallback" : (data.model_used || "Modelo");
+      const badgeClass = data.fallback ? "badge-fallback" : "badge-granite";
+      const perf = data.fallback
+        ? ""
+        : `<p><strong>Tiempo de respuesta:</strong> ${data.latency_ms ?? "—"} ms` +
+          (data.ttft_ms != null ? ` (primer token: ${data.ttft_ms} ms)` : "") +
+          `</p>`;
       return `
         <div>${escapeHtml(data.respuesta || "No disponible")}</div>
         <div class="meta">
@@ -354,18 +395,50 @@
               ? `<a href="${data.fuente}" target="_blank">${data.fuente}</a>`
               : "No disponible"
           }</p>
+          ${perf}
           <p><strong>Modelo:</strong> <span class="model-badge ${badgeClass}">${label}</span></p>
+        </div>
+        ${buildFeedbackHtml(data.trace_id)}
+      `;
+    }
+
+    function buildFeedbackHtml(traceId) {
+      if (!traceId) return "";
+      return `
+        <div class="feedback-btns" data-trace-id="${traceId}">
+          <span style="font-size:12px;color:#555;align-self:center">¿Te sirvió esta respuesta?</span>
+          <button class="fb-btn" onclick="sendFeedback('${traceId}', 1.0, this)">👍 Útil</button>
+          <button class="fb-btn" onclick="sendFeedback('${traceId}', 0.5, this)">🤔 Neutral</button>
+          <button class="fb-btn" onclick="sendFeedback('${traceId}', 0.0, this)">👎 No útil</button>
         </div>
       `;
     }
 
-    function callBenchmark(modelKey, query) {
+    async function sendFeedback(traceId, score, btn) {
+      try {
+        await fetch(`${BENCHMARK_API}/feedback`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ trace_id: traceId, score }),
+        });
+        const container = btn.closest(".feedback-btns");
+        container.querySelectorAll(".fb-btn").forEach(b => b.classList.remove("selected-pos", "selected-neg"));
+        const cls = score >= 0.8 ? "selected-pos" : score <= 0.2 ? "selected-neg" : null;
+        if (cls) btn.classList.add(cls);
+        if (!container.querySelector(".fb-thanks")) {
+          container.insertAdjacentHTML("beforeend", `<span class="fb-thanks">¡Gracias por tu feedback!</span>`);
+        }
+      } catch (error) {
+        console.error("No se pudo enviar el feedback", error);
+      }
+    }
+
+    function callBenchmark(query) {
       return fetch(`${BENCHMARK_API}/ask`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           query:    query,
-          model:    modelKey,
           history:  history,
           context:  currentContext,
         }),
@@ -379,9 +452,6 @@
         addMessage("assistant", "<span class='error'>Debes escribir una consulta.</span>");
         return;
       }
-
-      const selectedModel = modelSelect.value;
-      const otherModel    = selectedModel === "granite" ? "qwen" : "granite";
 
       addMessage("user", escapeHtml(query));
       queryInput.value  = "";
@@ -397,35 +467,17 @@
       `);
 
       try {
-        // Dispara ambos modelos en paralelo (el segundo, sin bloquear, para benchmark)
-        const selectedPromise = callBenchmark(selectedModel, query);
-        const otherPromise    = callBenchmark(otherModel, query).catch(() => null);
+        const result = await callBenchmark(query);
 
-        const selectedResult = await selectedPromise;
-
-        if (!selectedResult.ok) {
+        if (!result.ok) {
           throw new Error("No se pudo obtener respuesta del backend.");
         }
 
-        let data       = await selectedResult.json();
-        let actualModel = selectedModel;
-
-        // Si el modelo elegido no respondió realmente, usa la respuesta del otro
-        // modelo si este sí funcionó, en vez del texto de respaldo por defecto.
-        if (data.fallback) {
-          const otherResult = await otherPromise;
-          if (otherResult && otherResult.ok) {
-            const otherData = await otherResult.json();
-            if (!otherData.fallback) {
-              data        = otherData;
-              actualModel = otherModel;
-            }
-          }
-        }
+        const data = await result.json();
 
         loadingMessage.innerHTML = `
           <div class="message-title">ARCO</div>
-          ${buildAssistantHtml(data, actualModel)}
+          ${buildAssistantHtml(data)}
         `;
 
         history.push({ role: "user",      content: query });
