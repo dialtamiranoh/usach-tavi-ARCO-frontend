@@ -19,11 +19,15 @@
     --web:       #2a78d6;  /* blue   */
     --web-l:     #E6F1FB;
     --web-d:     #0C447C;
+    --web-fill:  #E6F1FB;
+    --web-2:     #6da7ec; /* lighter blue, same family — TTFT line in per-channel charts */
     --whatsapp:  #008300;  /* green  */
     --whatsapp-l:#E4F3E4;
     --whatsapp-d:#0A5A0A;
+    --whatsapp-2:#4CAF50; /* lighter green, same family — TTFT line in per-channel charts */
     --latencia:  #2a78d6;  /* blue   */
     --ttft:      #eb6834;  /* orange */
+    --ttft-fill: #FCEBE2;
     --violet:    #4a3aa7;
 
     --good:      #0ca30c;
@@ -34,10 +38,65 @@
     --fb-neu:    #eda100;  /* yellow — sub-3:1 vs surface, relief via visible labels */
     --fb-neg:    #e34948;  /* red    */
 
+    /* chart chrome */
+    --chart-grid:  #e1e0d9;
+    --chart-tick:  #898781;
+    --chart-empty: #e2e8f0;
+
+    /* table / status washes */
+    --table-head: #f8fafc;
+    --row-hover:  #f8fafc;
+    --ok-bg: #dcfce7;  --ok-fg: #166534;
+    --err-bg: #fee2e2; --err-fg: #991b1b;
+
     --radius: 12px;
   }
 
-  body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); padding: 24px; }
+  /* Dark mode — own steps against the dark surface, selected via toggle (not an automatic flip) */
+  html[data-theme="dark"] {
+    color-scheme: dark;
+    --bg:        #0f172a;
+    --surface:   #1e293b;
+    --border:    #334155;
+    --text:      #e2e8f0;
+    --muted:     #94a3b8;
+
+    --web:       #3987e5;
+    --web-l:     rgba(57,135,229,0.16);
+    --web-d:     #93c5fd;
+    --web-fill:  rgba(57,135,229,0.18);
+    --web-2:     #86b6ef;
+    --whatsapp:  #008300;
+    --whatsapp-l:rgba(0,131,0,0.20);
+    --whatsapp-d:#4ade80;
+    --whatsapp-2:#4ade80;
+    --latencia:  #3987e5;
+    --ttft:      #d95926;
+    --ttft-fill: rgba(217,89,38,0.18);
+    --violet:    #9085e9;
+
+    --good:      #0ca30c;
+    --critical:  #d03b3b;
+
+    --fb-pos:    #008300;
+    --fb-neu:    #c98500;
+    --fb-neg:    #e66767;
+
+    --chart-grid:  #2c2c2a;
+    --chart-tick:  #9aa5b8;
+    --chart-empty: #334155;
+
+    --table-head: #1a2233;
+    --row-hover:  #1a2233;
+    --ok-bg: rgba(34,197,94,0.16);   --ok-fg: #4ade80;
+    --err-bg: rgba(248,113,113,0.16); --err-fg: #f87171;
+  }
+
+  html[data-theme="dark"] .btn-primary { background: #3b5bdb; }
+  html[data-theme="dark"] .btn-primary:hover { background: #2f4bc4; }
+
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); padding: 24px;
+         transition: background-color .15s ease, color .15s ease; }
 
   h1 { font-size: 22px; font-weight: 500; margin-bottom: 4px; }
   .subtitle { font-size: 13px; color: var(--muted); margin-bottom: 24px; }
@@ -69,18 +128,18 @@
 
   /* ── Table ── */
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  thead th { background: #f8fafc; color: var(--muted); padding: 10px 12px; text-align: left;
+  thead th { background: var(--table-head); color: var(--muted); padding: 10px 12px; text-align: left;
              border-bottom: 1px solid var(--border); font-weight: 500; font-size: 12px; }
   tbody td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; font-variant-numeric: tabular-nums; }
-  tbody tr:hover { background: #f8fafc; }
+  tbody tr:hover { background: var(--row-hover); }
   tbody tr:last-child td { border-bottom: none; }
 
   /* ── Badges ── */
   .badge { font-size: 11px; padding: 2px 8px; border-radius: 20px; display: inline-block; }
   .badge-web { background: var(--web-l); color: var(--web-d); }
   .badge-wa  { background: var(--whatsapp-l); color: var(--whatsapp-d); }
-  .badge-ok  { background: #dcfce7; color: #166534; }
-  .badge-err { background: #fee2e2; color: #991b1b; }
+  .badge-ok  { background: var(--ok-bg); color: var(--ok-fg); }
+  .badge-err { background: var(--err-bg); color: var(--err-fg); }
 
   /* ── Consultador ── */
   .response-panel { border-radius: var(--radius); border: 1px solid var(--border); border-top: 3px solid var(--web);
@@ -101,8 +160,15 @@
   .fb-btn { padding: 4px 12px; border: 1px solid var(--border); border-radius: 20px;
             font-size: 12px; cursor: pointer; background: var(--surface); }
   .fb-btn:hover { background: var(--bg); }
-  .fb-btn.selected-pos { background: #dcfce7; border-color: #166534; color: #166534; }
-  .fb-btn.selected-neg { background: #fee2e2; border-color: #991b1b; color: #991b1b; }
+  .fb-btn.selected-pos { background: var(--ok-bg); border-color: var(--ok-fg); color: var(--ok-fg); }
+  .fb-btn.selected-neg { background: var(--err-bg); border-color: var(--err-fg); color: var(--err-fg); }
+
+  /* ── Theme toggle ── */
+  .header-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+  .theme-toggle { width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--border);
+                  background: var(--surface); font-size: 17px; cursor: pointer; flex-shrink: 0;
+                  display: flex; align-items: center; justify-content: center; }
+  .theme-toggle:hover { background: var(--bg); }
 
   /* ── Chart wrappers ── */
   .chart-wrap { position: relative; }
@@ -126,8 +192,13 @@
 </head>
 <body>
 
-<h1>📊 ARCO — Dashboard de métricas</h1>
-<p class="subtitle" id="lastUpdated">Cargando datos…</p>
+<div class="header-row mb16">
+  <div>
+    <h1>📊 ARCO — Dashboard de métricas</h1>
+    <p class="subtitle" id="lastUpdated">Cargando datos…</p>
+  </div>
+  <button id="themeToggle" class="theme-toggle" onclick="toggleTheme()" title="Cambiar tema" aria-label="Cambiar tema claro/oscuro">🌙</button>
+</div>
 
 <!-- Tabs -->
 <div class="tabs">
@@ -159,32 +230,43 @@
       <p class="card-sub" id="s-ttft-p95">—</p>
     </div>
     <div class="card">
-      <p class="card-title">Tasa de fallback</p>
-      <p class="card-val" id="s-fb">—</p>
-      <p class="card-sub" id="s-fb-sub">Modelo activo: <span id="s-model">—</span></p>
+      <p class="card-title">Costo estimado (simulado, hoy)</p>
+      <p class="card-val" id="s-cost">—</p>
+      <p class="card-sub" id="s-cost-sub">—</p>
     </div>
   </div>
 
   <div class="grid-2 mb24">
     <div class="card">
-      <p class="section-title">Latencia y TTFT en el tiempo (últimas 30 consultas)</p>
+      <p class="section-title">Latencia y TTFT en el tiempo — Web (últimas 20 consultas)</p>
       <div class="chart-legend">
-        <span><span class="dot" style="background:var(--latencia)"></span>Latencia total</span>
-        <span><span class="dot" style="background:var(--ttft)"></span>Tiempo al primer token</span>
+        <span><span class="dot" style="background:var(--web)"></span>Latencia total</span>
+        <span><span class="dot" style="background:var(--web-2)"></span>Tiempo al primer token</span>
       </div>
       <div class="chart-wrap" style="height:220px">
-        <canvas id="chartLatency" role="img" aria-label="Latencia y TTFT en el tiempo"></canvas>
+        <canvas id="chartLatencyWeb" role="img" aria-label="Latencia y TTFT en el tiempo, canal Web"></canvas>
       </div>
     </div>
     <div class="card">
-      <p class="section-title">Consultas por canal</p>
+      <p class="section-title">Latencia y TTFT en el tiempo — WhatsApp (últimas 20 consultas)</p>
       <div class="chart-legend">
-        <span><span class="dot" style="background:var(--web)"></span>Web</span>
-        <span><span class="dot" style="background:var(--whatsapp)"></span>WhatsApp</span>
+        <span><span class="dot" style="background:var(--whatsapp)"></span>Latencia total</span>
+        <span><span class="dot" style="background:var(--whatsapp-2)"></span>Tiempo al primer token</span>
       </div>
       <div class="chart-wrap" style="height:220px">
-        <canvas id="chartChannels" role="img" aria-label="Consultas por canal"></canvas>
+        <canvas id="chartLatencyWhatsapp" role="img" aria-label="Latencia y TTFT en el tiempo, canal WhatsApp"></canvas>
       </div>
+    </div>
+  </div>
+
+  <div class="card mb24">
+    <p class="section-title">Consultas por canal</p>
+    <div class="chart-legend">
+      <span><span class="dot" style="background:var(--web)"></span>Web</span>
+      <span><span class="dot" style="background:var(--whatsapp)"></span>WhatsApp</span>
+    </div>
+    <div class="chart-wrap" style="height:220px">
+      <canvas id="chartChannels" role="img" aria-label="Consultas por canal"></canvas>
     </div>
   </div>
 
@@ -284,16 +366,16 @@
 <div id="tab-historial" style="display:none">
   <div class="card mb16" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:14px 20px">
     <input type="text" id="histSearch" placeholder="Buscar consulta o trámite…"
-           style="padding:7px 14px;border:1px solid var(--border);border-radius:30px;font-size:13px;outline:none;flex:1;min-width:180px"
+           style="padding:7px 14px;border:1px solid var(--border);border-radius:30px;font-size:13px;outline:none;flex:1;min-width:180px;background:var(--surface);color:var(--text)"
            oninput="filterHistory()">
     <select id="histChannel" onchange="filterHistory()"
-            style="padding:7px 12px;border:1px solid var(--border);border-radius:30px;font-size:13px">
+            style="padding:7px 12px;border:1px solid var(--border);border-radius:30px;font-size:13px;background:var(--surface);color:var(--text)">
       <option value="">Todos los canales</option>
       <option value="web">Web</option>
       <option value="whatsapp">WhatsApp</option>
     </select>
     <select id="histFallback" onchange="filterHistory()"
-            style="padding:7px 12px;border:1px solid var(--border);border-radius:30px;font-size:13px">
+            style="padding:7px 12px;border:1px solid var(--border);border-radius:30px;font-size:13px;background:var(--surface);color:var(--text)">
       <option value="">Todos</option>
       <option value="ok">Sin fallback</option>
       <option value="err">Con fallback</option>
@@ -319,7 +401,28 @@ let statsGlobal  = null;
 let statsTeam    = null;
 let lastTraceId  = null;
 let feedbackState = {};
-let chartLatency, chartChannels, chartTeam, chartTramites, chartFeedback;
+let chartChannels, chartTeam, chartTramites, chartFeedback;
+let channelTimeCharts = {};
+
+const SIMULATED_RATE_PER_1K_TOKENS = 0.0002; // USD — tarifa simulada estilo modelo pequeño hospedado (~$0.20 / 1M tok)
+
+/* ── Theme ── */
+function cvar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+function theme() { return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light'; }
+
+function applyTheme(t) {
+  document.documentElement.setAttribute('data-theme', t);
+  const btn = document.getElementById('themeToggle');
+  if (btn) btn.textContent = t === 'dark' ? '☀️' : '🌙';
+}
+
+function toggleTheme() {
+  const next = theme() === 'dark' ? 'light' : 'dark';
+  localStorage.setItem('arco-theme', next);
+  applyTheme(next);
+  renderCharts();
+  renderTeam();
+}
 
 /* ── Tab switching ── */
 async function showTab(name) {
@@ -368,38 +471,59 @@ function renderSummary() {
   setText('s-lat-p95', `p95: ${fms(s.p95_latencia_ms)}`);
   setText('s-ttft', fms(s.promedio_ttft_ms));
   setText('s-ttft-p95', `p95: ${fms(s.p95_ttft_ms)}`);
-  setText('s-fb', fpct(s.tasa_fallback));
-  setText('s-model', s.modelo_activo || '—');
+
+  const today = todayStr();
+  const tokToday = allMetrics
+    .filter(m => (m.timestamp || '').startsWith(today))
+    .reduce((sum, m) => sum + (m.total_tokens || 0), 0);
+  const cost = tokToday / 1000 * SIMULATED_RATE_PER_1K_TOKENS;
+  setText('s-cost', tokToday.toLocaleString('es-CL') + ' tok');
+  setText('s-cost-sub',
+    `hoy · ≈ $${cost.toFixed(4)} USD simulado · $${(SIMULATED_RATE_PER_1K_TOKENS * 1000).toFixed(2)}/1M tok`);
+}
+
+function todayStr() {
+  const d = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 /* ── Charts ── */
 function renderCharts() {
-  renderLatencyChart();
+  Chart.defaults.color = cvar('--chart-tick');
+  Chart.defaults.borderColor = cvar('--chart-grid');
+  renderChannelTimeChart('chartLatencyWeb', 'web', '--web', '--web-2');
+  renderChannelTimeChart('chartLatencyWhatsapp', 'whatsapp', '--whatsapp', '--whatsapp-2');
   renderChannelsChart();
   renderTramitesChart();
   renderFeedbackChart();
 }
 
-function renderLatencyChart() {
-  const sorted = [...allMetrics].sort((a,b) => a.timestamp.localeCompare(b.timestamp)).slice(-30);
-  const labels = sorted.map(m => (m.timestamp||'').slice(11,19));
+function renderChannelTimeChart(canvasId, channel, primaryVar, secondaryVar) {
+  const sorted = allMetrics
+    .filter(m => m.channel === channel)
+    .sort((a, b) => a.timestamp.localeCompare(b.timestamp))
+    .slice(-20);
+  const labels = sorted.map(m => (m.timestamp || '').slice(11, 19));
   const latData = sorted.map(m => m.latency_ms || null);
   const ttftData = sorted.map(m => m.ttft_ms || null);
+  const grid = cvar('--chart-grid'), tick = cvar('--chart-tick');
+  const primary = cvar(primaryVar), secondary = cvar(secondaryVar);
 
-  if (chartLatency) chartLatency.destroy();
-  chartLatency = new Chart(document.getElementById('chartLatency'), {
+  if (channelTimeCharts[channel]) channelTimeCharts[channel].destroy();
+  channelTimeCharts[channel] = new Chart(document.getElementById(canvasId), {
     type: 'line',
     data: {
       labels,
       datasets: [
         {
           label: 'Latencia total', data: latData,
-          borderColor: '#2a78d6', backgroundColor: '#E6F1FB',
+          borderColor: primary, backgroundColor: primary,
           borderWidth: 2, pointRadius: 3, tension: 0.3, fill: false,
         },
         {
           label: 'TTFT', data: ttftData,
-          borderColor: '#eb6834', backgroundColor: '#FCEBE2',
+          borderColor: secondary, backgroundColor: secondary,
           borderWidth: 2, pointRadius: 3, tension: 0.3, fill: false,
           borderDash: [5, 3],
         },
@@ -407,10 +531,12 @@ function renderLatencyChart() {
     },
     options: {
       responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
+      plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false } },
+      interaction: { mode: 'index', intersect: false },
       scales: {
-        x: { ticks: { maxRotation: 45, font: { size: 10 } } },
-        y: { ticks: { font: { size: 10 } }, title: { display: true, text: 'ms', font: { size: 10 } } },
+        x: { ticks: { maxRotation: 45, font: { size: 10 }, color: tick }, grid: { color: grid } },
+        y: { ticks: { font: { size: 10 }, color: tick }, grid: { color: grid },
+             title: { display: true, text: 'ms', font: { size: 10 }, color: tick } },
       },
     },
   });
@@ -427,8 +553,8 @@ function renderChannelsChart() {
       labels: ['Web', 'WhatsApp'],
       datasets: [{
         data: [web, wa],
-        backgroundColor: ['#2a78d6', '#008300'],
-        borderColor: '#ffffff', borderWidth: 2,
+        backgroundColor: [cvar('--web'), cvar('--whatsapp')],
+        borderColor: cvar('--surface'), borderWidth: 2,
       }],
     },
     options: {
@@ -447,6 +573,7 @@ function renderTramitesChart() {
   const ranked = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 8);
   const labels = ranked.map(r => r[0]);
   const values = ranked.map(r => r[1]);
+  const grid = cvar('--chart-grid'), tick = cvar('--chart-tick');
 
   if (chartTramites) chartTramites.destroy();
   chartTramites = new Chart(document.getElementById('chartTramites'), {
@@ -456,7 +583,7 @@ function renderTramitesChart() {
       datasets: [{
         label: 'Consultas',
         data: values,
-        backgroundColor: '#E6F1FB', borderColor: '#2a78d6', borderWidth: 1, borderRadius: 4,
+        backgroundColor: cvar('--web-fill'), borderColor: cvar('--web'), borderWidth: 1, borderRadius: 4,
       }],
     },
     options: {
@@ -464,8 +591,8 @@ function renderTramitesChart() {
       responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: false } },
       scales: {
-        x: { ticks: { font: { size: 10 }, precision: 0 } },
-        y: { ticks: { font: { size: 11 } } },
+        x: { ticks: { font: { size: 10 }, precision: 0, color: tick }, grid: { color: grid } },
+        y: { ticks: { font: { size: 11 }, color: tick }, grid: { display: false } },
       },
     },
   });
@@ -499,8 +626,8 @@ function renderFeedbackChart() {
       labels: ['Positivo', 'Neutral', 'Negativo'],
       datasets: [{
         data: total ? [pos, neu, neg] : [1],
-        backgroundColor: total ? ['#008300', '#eda100', '#e34948'] : ['#e2e8f0'],
-        borderColor: '#ffffff', borderWidth: 2,
+        backgroundColor: total ? [cvar('--fb-pos'), cvar('--fb-neu'), cvar('--fb-neg')] : [cvar('--chart-empty')],
+        borderColor: cvar('--surface'), borderWidth: 2,
       }],
     },
     options: {
@@ -515,6 +642,10 @@ function renderTeam() {
   const team = statsTeam || {};
   const nombres = Object.keys(team);
 
+  Chart.defaults.color = cvar('--chart-tick');
+  Chart.defaults.borderColor = cvar('--chart-grid');
+  const grid = cvar('--chart-grid'), tick = cvar('--chart-tick');
+
   if (chartTeam) chartTeam.destroy();
   chartTeam = new Chart(document.getElementById('chartTeam'), {
     type: 'bar',
@@ -523,15 +654,15 @@ function renderTeam() {
       datasets: [{
         label: 'Consultas',
         data: nombres.map(n => team[n].total_consultas || 0),
-        backgroundColor: '#E6F1FB', borderColor: '#2a78d6', borderWidth: 1, borderRadius: 4,
+        backgroundColor: cvar('--web-fill'), borderColor: cvar('--web'), borderWidth: 1, borderRadius: 4,
       }],
     },
     options: {
       responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: false } },
       scales: {
-        x: { ticks: { font: { size: 11 } } },
-        y: { ticks: { font: { size: 11 }, precision: 0 } },
+        x: { ticks: { font: { size: 11 }, color: tick }, grid: { display: false } },
+        y: { ticks: { font: { size: 11 }, precision: 0, color: tick }, grid: { color: grid } },
       },
     },
   });
@@ -711,6 +842,7 @@ function esc(s) {
 }
 
 /* ── Init ── */
+applyTheme(localStorage.getItem('arco-theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
 loadAll();
 setInterval(loadAll, 30000);
 </script>
