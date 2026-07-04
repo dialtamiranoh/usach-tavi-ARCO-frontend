@@ -153,6 +153,7 @@
 
   .query-bar { display: flex; gap: 10px; margin-bottom: 16px; }
   .btn { padding: 10px 20px; border-radius: 30px; border: none; cursor: pointer; font-size: 14px; font-weight: 500; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
   .btn-primary { background: #1f3c88; color: white; }
   .btn-primary:hover { background: #0f2c6b; }
   .btn-primary:disabled { background: #94a3b8; cursor: not-allowed; }
@@ -343,10 +344,12 @@
     <div class="card">
       <p class="card-title">Tokens totales</p>
       <p class="card-val" id="qs-tok">—</p>
+      <p class="card-sub" id="qs-tok-sub">—</p>
     </div>
     <div class="card">
       <p class="card-title">Velocidad de generación</p>
       <p class="card-val" id="qs-tps">—</p>
+      <p class="card-sub">solo tokens de salida, sin contar el prefill (TTFT)</p>
     </div>
   </div>
 
@@ -429,6 +432,21 @@
       </thead>
       <tbody id="histBody"></tbody>
     </table>
+  </div>
+
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-top:14px">
+    <span style="font-size:13px;color:var(--muted)" id="histRangeInfo">—</span>
+    <div style="display:flex;align-items:center;gap:8px">
+      <button class="btn" id="histPrevBtn" onclick="histGoToPage(histPage - 1)"
+              style="background:#f1f5f9;color:#475569;border:1px solid #cbd5e1;font-size:13px;padding:6px 14px">
+        ‹ Anterior
+      </button>
+      <span style="font-size:13px;color:var(--muted)" id="histPageInfo">—</span>
+      <button class="btn" id="histNextBtn" onclick="histGoToPage(histPage + 1)"
+              style="background:#f1f5f9;color:#475569;border:1px solid #cbd5e1;font-size:13px;padding:6px 14px">
+        Siguiente ›
+      </button>
+    </div>
   </div>
 </div>
 
@@ -801,6 +819,7 @@ function renderQueryStats(m) {
   setText('qs-lat', fms(m.latency_ms));
   setText('qs-ttft', fms(m.ttft_ms));
   setText('qs-tok', m.total_tokens ?? '—');
+  setText('qs-tok-sub', `entrada ${m.input_tokens ?? 0} · salida ${m.output_tokens ?? 0}`);
 
   const genMs = (m.latency_ms || 0) - (m.ttft_ms || 0);
   const outTok = m.output_tokens || 0;
@@ -871,12 +890,16 @@ function renderHistory() {
   filterHistory();
 }
 
+const HIST_PAGE_SIZE = 50;
+let histPage = 1;
+let histFiltered = [];
+
 function filterHistory() {
   const search   = document.getElementById('histSearch').value.toLowerCase();
   const channel  = document.getElementById('histChannel').value;
   const fallback = document.getElementById('histFallback').value;
 
-  const filtered = allMetrics.filter(m => {
+  histFiltered = allMetrics.filter(m => {
     const matchSearch  = (m.user_query||'').toLowerCase().includes(search) ||
                          (m.tramite||'').toLowerCase().includes(search);
     const matchChannel = !channel || m.channel === channel;
@@ -886,44 +909,68 @@ function filterHistory() {
     return matchSearch && matchChannel && matchFb;
   });
 
+  histPage = 1;
+  renderHistoryPage();
+}
+
+function histGoToPage(page) {
+  const totalPages = Math.max(1, Math.ceil(histFiltered.length / HIST_PAGE_SIZE));
+  histPage = Math.min(Math.max(1, page), totalPages);
+  renderHistoryPage();
+}
+
+function renderHistoryPage() {
   const tbody = document.getElementById('histBody');
   tbody.innerHTML = '';
 
-  if (!filtered.length) {
+  const totalPages = Math.max(1, Math.ceil(histFiltered.length / HIST_PAGE_SIZE));
+  if (histPage > totalPages) histPage = totalPages;
+
+  const reversed = [...histFiltered].reverse();
+  const start = (histPage - 1) * HIST_PAGE_SIZE;
+  const pageItems = reversed.slice(start, start + HIST_PAGE_SIZE);
+
+  if (!pageItems.length) {
     tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:24px">Sin resultados</td></tr>';
-    return;
+  } else {
+    pageItems.forEach(m => {
+      const tr = tbody.insertRow();
+      tr.insertCell(0).textContent = (m.timestamp||'').slice(0,16).replace('T',' ');
+      const chCell = tr.insertCell(1);
+      chCell.innerHTML = m.channel === 'whatsapp'
+        ? '<span class="badge badge-wa">WhatsApp</span>'
+        : '<span class="badge badge-web">Web</span>';
+      tr.insertCell(2).textContent = m.integrante || '—';
+      tr.insertCell(3).textContent = m.tramite || '—';
+      const qCell = tr.insertCell(4);
+      qCell.style.maxWidth = '200px';
+      qCell.innerHTML = `<span title="${esc(m.user_query)}">${trunc(m.user_query, 55)}</span>`;
+      tr.insertCell(5).textContent = m.latency_ms ? Math.round(m.latency_ms) + ' ms' : '—';
+      tr.insertCell(6).textContent = m.ttft_ms ? Math.round(m.ttft_ms) + ' ms' : '—';
+      tr.insertCell(7).textContent = m.total_tokens || 0;
+      const fbCell = tr.insertCell(8);
+      fbCell.innerHTML = m.fallback
+        ? '<span class="badge badge-err">⚠️ Sí</span>'
+        : '<span class="badge badge-ok">✅ No</span>';
+      const feedCell = tr.insertCell(9);
+      if (m.feedback) {
+        const s = m.feedback.score;
+        feedCell.textContent = s >= 0.8 ? '👍 Útil' : s <= 0.2 ? '👎 No útil' : '🤔 Neutral';
+      } else {
+        feedCell.innerHTML = '<span style="color:var(--muted)">—</span>';
+      }
+      const verCell = tr.insertCell(10);
+      verCell.innerHTML = `<button class="btn" style="background:#f1f5f9;color:#475569;border:1px solid #cbd5e1;font-size:12px;padding:5px 14px"
+                                    onclick="showDetail('${m.trace_id}')">Ver</button>`;
+    });
   }
 
-  [...filtered].reverse().forEach(m => {
-    const tr = tbody.insertRow();
-    tr.insertCell(0).textContent = (m.timestamp||'').slice(0,16).replace('T',' ');
-    const chCell = tr.insertCell(1);
-    chCell.innerHTML = m.channel === 'whatsapp'
-      ? '<span class="badge badge-wa">WhatsApp</span>'
-      : '<span class="badge badge-web">Web</span>';
-    tr.insertCell(2).textContent = m.integrante || '—';
-    tr.insertCell(3).textContent = m.tramite || '—';
-    const qCell = tr.insertCell(4);
-    qCell.style.maxWidth = '200px';
-    qCell.innerHTML = `<span title="${esc(m.user_query)}">${trunc(m.user_query, 55)}</span>`;
-    tr.insertCell(5).textContent = m.latency_ms ? Math.round(m.latency_ms) + ' ms' : '—';
-    tr.insertCell(6).textContent = m.ttft_ms ? Math.round(m.ttft_ms) + ' ms' : '—';
-    tr.insertCell(7).textContent = m.total_tokens || 0;
-    const fbCell = tr.insertCell(8);
-    fbCell.innerHTML = m.fallback
-      ? '<span class="badge badge-err">⚠️ Sí</span>'
-      : '<span class="badge badge-ok">✅ No</span>';
-    const feedCell = tr.insertCell(9);
-    if (m.feedback) {
-      const s = m.feedback.score;
-      feedCell.textContent = s >= 0.8 ? '👍 Útil' : s <= 0.2 ? '👎 No útil' : '🤔 Neutral';
-    } else {
-      feedCell.innerHTML = '<span style="color:var(--muted)">—</span>';
-    }
-    const verCell = tr.insertCell(10);
-    verCell.innerHTML = `<button class="btn" style="background:#f1f5f9;color:#475569;border:1px solid #cbd5e1;font-size:12px;padding:5px 14px"
-                                  onclick="showDetail('${m.trace_id}')">Ver</button>`;
-  });
+  setText('histRangeInfo', histFiltered.length
+    ? `Mostrando ${start + 1}–${Math.min(start + HIST_PAGE_SIZE, histFiltered.length)} de ${histFiltered.length}`
+    : 'Sin resultados');
+  setText('histPageInfo', `Página ${histPage} de ${totalPages}`);
+  document.getElementById('histPrevBtn').disabled = histPage <= 1;
+  document.getElementById('histNextBtn').disabled = histPage >= totalPages;
 }
 
 function showDetail(traceId) {
