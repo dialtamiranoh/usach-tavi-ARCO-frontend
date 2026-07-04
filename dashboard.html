@@ -238,22 +238,32 @@
       <p class="card-sub" id="s-ttft-p95">—</p>
     </div>
     <div class="card">
-      <p class="card-title">Trámite no identificado</p>
-      <p class="card-val" id="s-noid">—</p>
-      <p class="card-sub" id="s-noid-sub">—</p>
-    </div>
-  </div>
-
-  <div class="grid-2 mb24">
-    <div class="card">
       <p class="card-title">Velocidad de generación</p>
       <p class="card-val" id="s-tps">—</p>
       <p class="card-sub">tokens de salida por segundo, sin contar el prefill (TTFT)</p>
     </div>
+  </div>
+
+  <div class="grid-4 mb24">
     <div class="card">
       <p class="card-title">Total token (Costo estimado, hoy)</p>
       <p class="card-val" id="s-cost">—</p>
       <p class="card-sub" id="s-cost-sub">—</p>
+    </div>
+    <div class="card">
+      <p class="card-title">Consultas por hora</p>
+      <p class="card-val" id="s-throughput">—</p>
+      <p class="card-sub">promedio a lo largo del historial registrado</p>
+    </div>
+    <div class="card">
+      <p class="card-title">Memoria del backend</p>
+      <p class="card-val" id="s-memoria">—</p>
+      <p class="card-sub">RAM usada por el proceso ahora mismo</p>
+    </div>
+    <div class="card">
+      <p class="card-title">Accuracy de enrutamiento</p>
+      <p class="card-val" id="s-eval">—</p>
+      <p class="card-sub" id="s-eval-sub">—</p>
     </div>
   </div>
 
@@ -280,20 +290,28 @@
     </div>
   </div>
 
-  <div class="card mb24">
-    <p class="section-title">Trámites más consultados</p>
-    <div class="chart-wrap" style="height:260px">
-      <canvas id="chartTramites" role="img" aria-label="Trámites más consultados"></canvas>
+  <div class="grid-2 mb24">
+    <div class="card">
+      <p class="section-title">Trámites más consultados</p>
+      <div class="chart-wrap" style="height:260px">
+        <canvas id="chartTramites" role="img" aria-label="Trámites más consultados"></canvas>
+      </div>
+    </div>
+    <div class="card">
+      <p class="section-title">Memoria del backend en el tiempo (últimas 30 consultas)</p>
+      <div class="chart-legend">
+        <span><span class="dot" style="background:var(--violet)"></span>RAM usada (MB)</span>
+      </div>
+      <div class="chart-wrap" style="height:260px">
+        <canvas id="chartMemoria" role="img" aria-label="Memoria del backend en el tiempo"></canvas>
+      </div>
     </div>
   </div>
 
   <div class="grid-2 mb24">
     <div class="card">
       <p class="section-title">Consultas por canal</p>
-      <div class="chart-legend">
-        <span><span class="dot" style="background:var(--web)"></span>Web</span>
-        <span><span class="dot" style="background:var(--whatsapp)"></span>WhatsApp</span>
-      </div>
+      <div class="chart-legend" id="channelsLegend"></div>
       <div class="chart-wrap" style="height:220px">
         <canvas id="chartChannels" role="img" aria-label="Consultas por canal"></canvas>
       </div>
@@ -489,7 +507,7 @@ let statsGlobal  = null;
 let statsTeam    = null;
 let lastTraceId  = null;
 let feedbackState = {};
-let chartChannels, chartTeam, chartTramites, chartFeedback;
+let chartChannels, chartTeam, chartTramites, chartFeedback, chartMemoria;
 let channelTimeCharts = {};
 
 const SIMULATED_RATE_PER_1K_TOKENS = 0.0002; // USD — tarifa simulada estilo modelo pequeño hospedado (~$0.20 / 1M tok)
@@ -561,10 +579,19 @@ function renderSummary() {
   setText('s-ttft', fms(s.promedio_ttft_ms));
   setText('s-ttft-p95', `p95: ${fms(s.p95_ttft_ms)}`);
 
-  setText('s-noid', fpct(s.tasa_no_identificado));
-  const noidCount = Math.round((s.tasa_no_identificado || 0) / 100 * (s.total_consultas || 0));
-  setText('s-noid-sub', `${noidCount} de ${s.total_consultas ?? 0} consultas`);
   setText('s-tps', s.tokens_por_segundo ? `${s.tokens_por_segundo} tok/s` : '—');
+
+  setText('s-throughput', s.consultas_por_hora ? `${s.consultas_por_hora}/h` : '—');
+  setText('s-memoria', s.memoria_mb ? `${s.memoria_mb} MB` : '—');
+
+  if (s.eval_accuracy != null) {
+    setText('s-eval', `${s.eval_accuracy}%`);
+    setText('s-eval-sub',
+      `${s.eval_correctos}/${s.eval_total_casos} casos · ${s.eval_aprobado ? '✅ aprobado' : '⚠️ bajo el mínimo'} (${s.eval_accuracy_minima}%)`);
+  } else {
+    setText('s-eval', '—');
+    setText('s-eval-sub', 'corre python eval/evaluador.py para generar un reporte');
+  }
 
   const today = todayStr();
   const tokToday = allMetrics
@@ -589,8 +616,42 @@ function renderCharts() {
   renderChannelTimeChart('chartLatencyWeb', 'web', '--web', '--web-2');
   renderChannelTimeChart('chartLatencyWhatsapp', 'whatsapp', '--whatsapp', '--whatsapp-2');
   renderChannelsChart();
+  renderMemoriaChart();
   renderTramitesChart();
   renderFeedbackChart();
+}
+
+function renderMemoriaChart() {
+  const sorted = allMetrics
+    .filter(m => m.memoria_mb != null)
+    .sort((a, b) => a.timestamp.localeCompare(b.timestamp))
+    .slice(-30);
+  const labels = sorted.map(m => (m.timestamp || '').slice(11, 19));
+  const data = sorted.map(m => m.memoria_mb);
+  const grid = cvar('--chart-grid'), tick = cvar('--chart-tick'), violet = cvar('--violet');
+
+  if (chartMemoria) chartMemoria.destroy();
+  chartMemoria = new Chart(document.getElementById('chartMemoria'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'RAM usada (MB)', data,
+        borderColor: violet, backgroundColor: violet,
+        borderWidth: 2, pointRadius: 3, tension: 0.3, fill: false,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false } },
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        x: { ticks: { maxRotation: 45, font: { size: 10 }, color: tick }, grid: { color: grid } },
+        y: { ticks: { font: { size: 10 }, color: tick }, grid: { color: grid },
+             title: { display: true, text: 'MB', font: { size: 10 }, color: tick } },
+      },
+    },
+  });
 }
 
 function renderChannelTimeChart(canvasId, channel, primaryVar, secondaryVar) {
@@ -639,6 +700,20 @@ function renderChannelTimeChart(canvasId, channel, primaryVar, secondaryVar) {
 function renderChannelsChart() {
   const web = allMetrics.filter(m => m.channel === 'web').length;
   const wa  = allMetrics.filter(m => m.channel === 'whatsapp').length;
+  const total = web + wa;
+
+  const legend = document.getElementById('channelsLegend');
+  if (legend) {
+    if (!total) {
+      legend.innerHTML = '<span style="color:var(--muted)">Sin consultas aún</span>';
+    } else {
+      const pct = n => Math.round(n / total * 100);
+      legend.innerHTML = `
+        <span><span class="dot" style="background:var(--web)"></span>Web ${pct(web)}% (${web})</span>
+        <span><span class="dot" style="background:var(--whatsapp)"></span>WhatsApp ${pct(wa)}% (${wa})</span>
+      `;
+    }
+  }
 
   if (chartChannels) chartChannels.destroy();
   chartChannels = new Chart(document.getElementById('chartChannels'), {
