@@ -111,6 +111,7 @@
   .card { background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border); padding: 20px; }
   .card-title { font-size: 12px; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: .5px; }
   .card-val   { font-size: 26px; font-weight: 500; }
+  .card-val-text { font-size: 16px; font-weight: 500; line-height: 1.3; }
   .card-sub   { font-size: 12px; color: var(--muted); margin-top: 2px; }
 
   /* ── Grids ── */
@@ -163,6 +164,12 @@
   .fb-btn.selected-pos { background: var(--ok-bg); border-color: var(--ok-fg); color: var(--ok-fg); }
   .fb-btn.selected-neg { background: var(--err-bg); border-color: var(--err-fg); color: var(--err-fg); }
 
+  /* ── Detail modal ── */
+  .detail-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+                     display: flex; align-items: flex-start; justify-content: center;
+                     padding: 40px 16px; overflow-y: auto; z-index: 100; }
+  .detail-modal { width: 100%; max-width: 640px; max-height: 85vh; overflow-y: auto; }
+
   /* ── Theme toggle ── */
   .header-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
   .theme-toggle { width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--border);
@@ -203,8 +210,8 @@
 <!-- Tabs -->
 <div class="tabs">
   <button class="tab active" onclick="showTab('resumen')">Resumen</button>
-  <button class="tab" onclick="showTab('equipo')">WhatsApp por integrante</button>
   <button class="tab" onclick="showTab('consultar')">Consultar en vivo</button>
+  <button class="tab" onclick="showTab('equipo')">WhatsApp por integrante</button>
   <button class="tab" onclick="showTab('historial')">Historial</button>
 </div>
 
@@ -230,7 +237,20 @@
       <p class="card-sub" id="s-ttft-p95">—</p>
     </div>
     <div class="card">
-      <p class="card-title">Costo estimado (simulado, hoy)</p>
+      <p class="card-title">Trámite no identificado</p>
+      <p class="card-val" id="s-noid">—</p>
+      <p class="card-sub" id="s-noid-sub">—</p>
+    </div>
+  </div>
+
+  <div class="grid-2 mb24">
+    <div class="card">
+      <p class="card-title">Velocidad de generación</p>
+      <p class="card-val" id="s-tps">—</p>
+      <p class="card-sub">tokens de salida por segundo, sin contar el prefill (TTFT)</p>
+    </div>
+    <div class="card">
+      <p class="card-title">Total token (Costo estimado, hoy)</p>
       <p class="card-val" id="s-cost">—</p>
       <p class="card-sub" id="s-cost-sub">—</p>
     </div>
@@ -260,21 +280,21 @@
   </div>
 
   <div class="card mb24">
-    <p class="section-title">Consultas por canal</p>
-    <div class="chart-legend">
-      <span><span class="dot" style="background:var(--web)"></span>Web</span>
-      <span><span class="dot" style="background:var(--whatsapp)"></span>WhatsApp</span>
-    </div>
-    <div class="chart-wrap" style="height:220px">
-      <canvas id="chartChannels" role="img" aria-label="Consultas por canal"></canvas>
+    <p class="section-title">Trámites más consultados</p>
+    <div class="chart-wrap" style="height:260px">
+      <canvas id="chartTramites" role="img" aria-label="Trámites más consultados"></canvas>
     </div>
   </div>
 
   <div class="grid-2 mb24">
     <div class="card">
-      <p class="section-title">Trámites más consultados</p>
-      <div class="chart-wrap" style="height:260px">
-        <canvas id="chartTramites" role="img" aria-label="Trámites más consultados"></canvas>
+      <p class="section-title">Consultas por canal</p>
+      <div class="chart-legend">
+        <span><span class="dot" style="background:var(--web)"></span>Web</span>
+        <span><span class="dot" style="background:var(--whatsapp)"></span>WhatsApp</span>
+      </div>
+      <div class="chart-wrap" style="height:220px">
+        <canvas id="chartChannels" role="img" aria-label="Consultas por canal"></canvas>
       </div>
     </div>
     <div class="card">
@@ -289,7 +309,71 @@
 </div>
 
 <!-- ════════════════════════════════════════════════
-     TAB 2 — WHATSAPP POR INTEGRANTE
+     TAB 2 — CONSULTAR EN VIVO
+════════════════════════════════════════════════ -->
+<div id="tab-consultar" style="display:none">
+
+  <div class="card mb16" id="lastQueryCard" style="display:none;padding:14px 20px">
+    <p class="card-title">Última consulta</p>
+    <p id="lastQueryText" style="font-size:14px;margin-top:6px;color:var(--text)"></p>
+  </div>
+
+  <div class="response-panel card mb16" id="responsePanel">
+    <div class="panel-header">
+      <span class="panel-title"><span class="badge badge-web" id="r-channel-badge">Web</span></span>
+      <span class="meta-pill" id="r-meta"></span>
+    </div>
+    <div id="r-response" class="response-empty">Sin respuestas aún. Envía una consulta desde index.html o WhatsApp.</div>
+    <div class="feedback-btns" id="r-fb-btns" style="display:none">
+      <button class="fb-btn" onclick="sendFeedback(1.0, this)">👍 Útil</button>
+      <button class="fb-btn" onclick="sendFeedback(0.5, this)">🤔 Neutral</button>
+      <button class="fb-btn" onclick="sendFeedback(0.0, this)">👎 No útil</button>
+    </div>
+  </div>
+
+  <div class="grid-4 mb16" id="queryStatsSection" style="display:none">
+    <div class="card">
+      <p class="card-title">Latencia total</p>
+      <p class="card-val" id="qs-lat">—</p>
+    </div>
+    <div class="card">
+      <p class="card-title">Tiempo al primer token</p>
+      <p class="card-val" id="qs-ttft">—</p>
+    </div>
+    <div class="card">
+      <p class="card-title">Tokens totales</p>
+      <p class="card-val" id="qs-tok">—</p>
+    </div>
+    <div class="card">
+      <p class="card-title">Velocidad de generación</p>
+      <p class="card-val" id="qs-tps">—</p>
+    </div>
+  </div>
+
+  <div class="grid-4" id="queryStatsSection2" style="display:none">
+    <div class="card">
+      <p class="card-title">Trámite</p>
+      <p class="card-val card-val-text" id="qs-tramite">—</p>
+    </div>
+    <div class="card">
+      <p class="card-title">Canal</p>
+      <p class="card-val card-val-text" id="qs-canal">—</p>
+      <p class="card-sub" id="qs-canal-sub">—</p>
+    </div>
+    <div class="card">
+      <p class="card-title">Fallback</p>
+      <p class="card-val card-val-text" id="qs-fb">—</p>
+    </div>
+    <div class="card">
+      <p class="card-title">Feedback del usuario</p>
+      <p class="card-val card-val-text" id="qs-feedback">—</p>
+    </div>
+  </div>
+
+</div>
+
+<!-- ════════════════════════════════════════════════
+     TAB 3 — WHATSAPP POR INTEGRANTE
 ════════════════════════════════════════════════ -->
 <div id="tab-equipo" style="display:none">
 
@@ -315,53 +399,7 @@
 </div>
 
 <!-- ════════════════════════════════════════════════
-     TAB 4 — CONSULTAR EN VIVO
-════════════════════════════════════════════════ -->
-<div id="tab-consultar" style="display:none">
-
-  <div class="card mb16" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
-    <div>
-      <p class="section-title" style="margin-bottom:4px">Última respuesta desde ARCO</p>
-      <p style="font-size:13px;color:var(--muted)">Se muestra automáticamente la respuesta más reciente (web o WhatsApp).</p>
-    </div>
-    <button class="btn"
-            style="background:#f1f5f9;color:#475569;border:1px solid #cbd5e1;font-size:13px"
-            onclick="clearConsultar()">
-      Limpiar
-    </button>
-  </div>
-
-  <div class="card mb16" id="lastQueryCard" style="display:none;padding:14px 20px">
-    <p class="card-title">Última consulta</p>
-    <p id="lastQueryText" style="font-size:14px;margin-top:6px;color:var(--text)"></p>
-  </div>
-
-  <div class="response-panel card mb16" id="responsePanel">
-    <div class="panel-header">
-      <span class="panel-title"><span class="badge badge-web" id="r-channel-badge">Web</span></span>
-      <span class="meta-pill" id="r-meta"></span>
-    </div>
-    <div id="r-response" class="response-empty">Sin respuestas aún. Envía una consulta desde index.html o WhatsApp.</div>
-    <div class="feedback-btns" id="r-fb-btns" style="display:none">
-      <button class="fb-btn" onclick="sendFeedback(1.0, this)">👍 Útil</button>
-      <button class="fb-btn" onclick="sendFeedback(0.5, this)">🤔 Neutral</button>
-      <button class="fb-btn" onclick="sendFeedback(0.0, this)">👎 No útil</button>
-    </div>
-  </div>
-
-  <div class="card" id="queryStatsSection" style="display:none">
-    <p class="section-title">Métricas de esta consulta</p>
-    <div class="metric-row"><span class="label">Trámite</span><span class="val" id="qs-tramite">—</span></div>
-    <div class="metric-row"><span class="label">Latencia total</span><span class="val" id="qs-lat">—</span></div>
-    <div class="metric-row"><span class="label">TTFT</span><span class="val" id="qs-ttft">—</span></div>
-    <div class="metric-row"><span class="label">Tokens totales</span><span class="val" id="qs-tok">—</span></div>
-    <div class="metric-row"><span class="label">Fallback</span><span class="val" id="qs-fb">—</span></div>
-  </div>
-
-</div>
-
-<!-- ════════════════════════════════════════════════
-     TAB 5 — HISTORIAL
+     TAB 4 — HISTORIAL
 ════════════════════════════════════════════════ -->
 <div id="tab-historial" style="display:none">
   <div class="card mb16" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:14px 20px">
@@ -386,11 +424,43 @@
       <thead>
         <tr>
           <th>Fecha</th><th>Canal</th><th>Integrante</th><th>Trámite</th><th>Consulta</th>
-          <th>Latencia</th><th>TTFT</th><th>Tokens</th><th>Fallback</th><th>Feedback</th>
+          <th>Latencia</th><th>TTFT</th><th>Tokens</th><th>Fallback</th><th>Feedback</th><th></th>
         </tr>
       </thead>
       <tbody id="histBody"></tbody>
     </table>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════
+     MODAL — Detalle completo de una consulta
+════════════════════════════════════════════════ -->
+<div id="detailOverlay" class="detail-overlay" style="display:none" onclick="if(event.target===this) closeDetail()">
+  <div class="detail-modal card">
+    <div class="panel-header mb16">
+      <span class="section-title" style="margin:0">Detalle de la consulta</span>
+      <button class="theme-toggle" style="width:32px;height:32px;font-size:14px" onclick="closeDetail()" aria-label="Cerrar">✕</button>
+    </div>
+    <div class="metric-row"><span class="label">Fecha</span><span class="val" id="d-fecha">—</span></div>
+    <div class="metric-row"><span class="label">Canal</span><span class="val" id="d-canal">—</span></div>
+    <div class="metric-row"><span class="label">Integrante / Número</span><span class="val" id="d-integrante">—</span></div>
+    <div class="metric-row"><span class="label">Trámite</span><span class="val" id="d-tramite">—</span></div>
+    <div class="metric-row"><span class="label">Latencia total</span><span class="val" id="d-lat">—</span></div>
+    <div class="metric-row"><span class="label">TTFT</span><span class="val" id="d-ttft">—</span></div>
+    <div class="metric-row"><span class="label">Tokens (entrada/salida/total)</span><span class="val" id="d-tok">—</span></div>
+    <div class="metric-row"><span class="label">Fallback</span><span class="val" id="d-fb">—</span></div>
+    <div class="metric-row"><span class="label">Feedback</span><span class="val" id="d-feedback">—</span></div>
+
+    <p class="card-title" style="margin-top:16px">Consulta del usuario</p>
+    <p id="d-query" style="font-size:14px;margin-top:4px"></p>
+
+    <p class="card-title" style="margin-top:16px">Respuesta de ARCO</p>
+    <p id="d-respuesta" style="font-size:14px;margin-top:4px;line-height:1.5"></p>
+
+    <div id="d-error-wrap" style="display:none">
+      <p class="card-title" style="margin-top:16px;color:var(--err-fg)">Error</p>
+      <p id="d-error" style="font-size:13px;margin-top:4px;color:var(--err-fg)"></p>
+    </div>
   </div>
 </div>
 
@@ -405,6 +475,7 @@ let chartChannels, chartTeam, chartTramites, chartFeedback;
 let channelTimeCharts = {};
 
 const SIMULATED_RATE_PER_1K_TOKENS = 0.0002; // USD — tarifa simulada estilo modelo pequeño hospedado (~$0.20 / 1M tok)
+const NO_MATCH_TRAMITES = new Set(['No identificado', 'Fuera del alcance']);
 
 /* ── Theme ── */
 function cvar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
@@ -426,7 +497,7 @@ function toggleTheme() {
 
 /* ── Tab switching ── */
 async function showTab(name) {
-  const tabs = ['resumen','equipo','consultar','historial'];
+  const tabs = ['resumen','consultar','equipo','historial'];
   tabs.forEach(t => {
     document.getElementById('tab-' + t).style.display = t === name ? '' : 'none';
   });
@@ -472,6 +543,11 @@ function renderSummary() {
   setText('s-ttft', fms(s.promedio_ttft_ms));
   setText('s-ttft-p95', `p95: ${fms(s.p95_ttft_ms)}`);
 
+  setText('s-noid', fpct(s.tasa_no_identificado));
+  const noidCount = Math.round((s.tasa_no_identificado || 0) / 100 * (s.total_consultas || 0));
+  setText('s-noid-sub', `${noidCount} de ${s.total_consultas ?? 0} consultas`);
+  setText('s-tps', s.tokens_por_segundo ? `${s.tokens_por_segundo} tok/s` : '—');
+
   const today = todayStr();
   const tokToday = allMetrics
     .filter(m => (m.timestamp || '').startsWith(today))
@@ -501,7 +577,7 @@ function renderCharts() {
 
 function renderChannelTimeChart(canvasId, channel, primaryVar, secondaryVar) {
   const sorted = allMetrics
-    .filter(m => m.channel === channel)
+    .filter(m => m.channel === channel && !NO_MATCH_TRAMITES.has(m.tramite))
     .sort((a, b) => a.timestamp.localeCompare(b.timestamp))
     .slice(-20);
   const labels = sorted.map(m => (m.timestamp || '').slice(11, 19));
@@ -715,22 +791,40 @@ function renderLastResponse() {
   renderQueryStats(last);
 }
 
-function clearConsultar() {
-  document.getElementById('lastQueryCard').style.display = 'none';
-  document.getElementById('queryStatsSection').style.display = 'none';
-  setPanel('Sin respuestas aún. Envía una consulta desde index.html o WhatsApp.', '', false);
-  lastTraceId = null;
-}
-
 function renderQueryStats(m) {
-  const section = document.getElementById('queryStatsSection');
-  if (!m) { section.style.display = 'none'; return; }
-  section.style.display = '';
-  setText('qs-tramite', m.tramite || '—');
+  const section  = document.getElementById('queryStatsSection');
+  const section2 = document.getElementById('queryStatsSection2');
+  if (!m) { section.style.display = 'none'; section2.style.display = 'none'; return; }
+  section.style.display  = '';
+  section2.style.display = '';
+
   setText('qs-lat', fms(m.latency_ms));
   setText('qs-ttft', fms(m.ttft_ms));
   setText('qs-tok', m.total_tokens ?? '—');
+
+  const genMs = (m.latency_ms || 0) - (m.ttft_ms || 0);
+  const outTok = m.output_tokens || 0;
+  setText('qs-tps', genMs > 0 && outTok > 0 ? `${(outTok / (genMs / 1000)).toFixed(1)} tok/s` : '—');
+
+  setText('qs-tramite', m.tramite || '—');
   setText('qs-fb', m.fallback ? '⚠️ Sí' : '✅ No');
+
+  const isWa = m.channel === 'whatsapp';
+  setText('qs-canal', isWa ? 'WhatsApp' : 'Web');
+  if (isWa) {
+    const nombre = m.integrante || 'Desconocido';
+    const numero = m.telefono || m.integrante || '—';
+    setText('qs-canal-sub', nombre !== numero ? `${nombre} · ${numero}` : numero);
+  } else {
+    setText('qs-canal-sub', '—');
+  }
+
+  if (m.feedback) {
+    const s = m.feedback.score;
+    setText('qs-feedback', s >= 0.8 ? '👍 Útil' : s <= 0.2 ? '👎 No útil' : '🤔 Neutral');
+  } else {
+    setText('qs-feedback', 'Sin feedback aún');
+  }
 }
 
 function setPanel(text, meta, showFeedback, feedbackScore) {
@@ -796,7 +890,7 @@ function filterHistory() {
   tbody.innerHTML = '';
 
   if (!filtered.length) {
-    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:24px">Sin resultados</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:24px">Sin resultados</td></tr>';
     return;
   }
 
@@ -826,7 +920,57 @@ function filterHistory() {
     } else {
       feedCell.innerHTML = '<span style="color:var(--muted)">—</span>';
     }
+    const verCell = tr.insertCell(10);
+    verCell.innerHTML = `<button class="btn" style="background:#f1f5f9;color:#475569;border:1px solid #cbd5e1;font-size:12px;padding:5px 14px"
+                                  onclick="showDetail('${m.trace_id}')">Ver</button>`;
   });
+}
+
+function showDetail(traceId) {
+  const m = allMetrics.find(x => x.trace_id === traceId);
+  if (!m) return;
+
+  setText('d-fecha', (m.timestamp || '').slice(0, 19).replace('T', ' '));
+  setText('d-canal', m.channel === 'whatsapp' ? 'WhatsApp' : 'Web');
+
+  if (m.channel === 'whatsapp') {
+    const nombre = m.integrante || 'Desconocido';
+    const numero = m.telefono || m.integrante || '—';
+    setText('d-integrante', nombre !== numero ? `${nombre} (${numero})` : numero);
+  } else {
+    setText('d-integrante', '—');
+  }
+
+  setText('d-tramite', m.tramite || '—');
+  setText('d-lat', fms(m.latency_ms));
+  setText('d-ttft', fms(m.ttft_ms));
+  setText('d-tok', `${m.input_tokens ?? 0} / ${m.output_tokens ?? 0} / ${m.total_tokens ?? 0}`);
+  setText('d-fb', m.fallback ? '⚠️ Sí' : '✅ No');
+
+  if (m.feedback) {
+    const s = m.feedback.score;
+    const label = s >= 0.8 ? '👍 Útil' : s <= 0.2 ? '👎 No útil' : '🤔 Neutral';
+    setText('d-feedback', m.feedback.comment ? `${label} — "${m.feedback.comment}"` : label);
+  } else {
+    setText('d-feedback', 'Sin feedback aún');
+  }
+
+  setText('d-query', m.user_query || '—');
+  setText('d-respuesta', m.respuesta || '—');
+
+  const errorWrap = document.getElementById('d-error-wrap');
+  if (m.error) {
+    errorWrap.style.display = '';
+    setText('d-error', m.error);
+  } else {
+    errorWrap.style.display = 'none';
+  }
+
+  document.getElementById('detailOverlay').style.display = 'flex';
+}
+
+function closeDetail() {
+  document.getElementById('detailOverlay').style.display = 'none';
 }
 
 /* ── Helpers ── */
