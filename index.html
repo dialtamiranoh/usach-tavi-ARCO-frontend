@@ -76,6 +76,31 @@
       margin: 6px 0;
     }
 
+    .plan-list {
+      margin-top: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .plan-step {
+      background: white;
+      border: 1px solid #c7d2fe;
+      border-radius: 10px;
+      padding: 12px 14px;
+    }
+
+    .plan-step-title {
+      font-weight: bold;
+      color: #1f3c88;
+      margin-bottom: 6px;
+    }
+
+    .plan-step p {
+      margin: 4px 0;
+      font-size: 14px;
+    }
+
     textarea {
       width: 100%;
       min-height: 110px;
@@ -175,7 +200,7 @@
         .replace(/>/g, "&gt;");
     }
 
-    function buildAssistantHtml(data) {
+    function buildSingleItemHtml(data) {
       return `
         <div>${escapeHtml(data.respuesta || "No disponible")}</div>
         <div class="meta">
@@ -192,6 +217,65 @@
           }</p>
         </div>
       `;
+    }
+
+    function buildStepCard(step, tituloPrefijo) {
+      const descripcion = step.respuesta || step.respuesta_base || "";
+      return `
+        <div class="plan-step">
+          <div class="plan-step-title">${escapeHtml(tituloPrefijo)}${escapeHtml(step.tramite || "")}</div>
+          ${descripcion ? `<p>${escapeHtml(descripcion)}</p>` : ""}
+          <p><strong>Costo:</strong> ${escapeHtml(step.costo || "No disponible")}</p>
+          <p><strong>Presencialidad:</strong> ${escapeHtml(step.presencialidad || "No disponible")}</p>
+          <p><strong>ClaveÚnica:</strong> ${escapeHtml(step.requiere_clave_unica || "No disponible")}</p>
+          <p><strong>Fuente:</strong> ${
+            step.fuente
+              ? `<a href="${step.fuente}" target="_blank">${step.fuente}</a>`
+              : "No disponible"
+          }</p>
+        </div>
+      `;
+    }
+
+    function buildPlanHtml(data) {
+      const introTexto = data.intro || "Aquí tienes el plan de trámites que necesitas seguir:";
+      let html = `<div>${escapeHtml(introTexto)}</div>`;
+
+      if (Array.isArray(data.plan) && data.plan.length > 0) {
+        html += `<div class="plan-list">`;
+        data.plan.forEach((step) => {
+          html += buildStepCard(step, `Paso ${step.orden}: `);
+        });
+        html += `</div>`;
+      }
+
+      return html;
+    }
+
+    function buildIndependientesHtml(data) {
+      if (!Array.isArray(data.consultas) || data.consultas.length === 0) {
+        return `<div>${escapeHtml(data.respuesta || "No disponible")}</div>`;
+      }
+
+      let html = `<div class="plan-list">`;
+      data.consultas.forEach((consulta) => {
+        html += buildStepCard(consulta, "");
+      });
+      html += `</div>`;
+
+      return html;
+    }
+
+    function buildAssistantHtml(data) {
+      if (data.modo === "plan") {
+        return buildPlanHtml(data);
+      }
+
+      if (data.modo === "consultas_independientes") {
+        return buildIndependientesHtml(data);
+      }
+
+      return buildSingleItemHtml(data);
     }
 
     async function sendQuery() {
@@ -235,7 +319,7 @@
         history.push({ role: "user", content: query });
         history.push({ role: "assistant", content: data.respuesta || "" });
 
-        if (data.tramite && data.tramite !== "No identificado") {
+        if (data.tramite && data.tramite !== "No identificado" && !data.modo) {
           currentContext = {
             tramite: data.tramite,
             respuesta_base: data.respuesta_base || null,
