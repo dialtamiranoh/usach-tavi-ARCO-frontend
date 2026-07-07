@@ -191,14 +191,59 @@
              border-top-color: #1f3c88; border-radius: 50%; animation: spin .7s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  /* ── Responsive ── */
-  @media (max-width: 700px) {
-    .grid-4, .grid-3 { grid-template-columns: 1fr 1fr; }
-    .grid-2 { grid-template-columns: 1fr; }
-  }
-</style>
+    /* ── Main Navbar ── */
+    .main-navbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--surface, #ffffff);
+      border: 1px solid var(--border, #e2e8f0);
+      border-radius: var(--radius, 12px);
+      padding: 12px 24px;
+      margin-bottom: 24px;
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.02);
+    }
+    .navbar-brand {
+      font-size: 18px;
+      font-weight: 800;
+      background: linear-gradient(135deg, #1f3c88 0%, #4a7fc4 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: 0.5px;
+    }
+    .navbar-links {
+      display: flex;
+      gap: 8px;
+    }
+    .nav-link {
+      text-decoration: none;
+      color: var(--muted, #64748b);
+      font-size: 13px;
+      font-weight: 600;
+      padding: 6px 12px;
+      border-radius: 8px;
+      transition: all 0.15s ease;
+    }
+    .nav-link:hover {
+      background: var(--bg, #f8fafc);
+      color: var(--text, #1e293b);
+    }
+    .nav-link.active {
+      background: var(--web-l, #ebf8ff);
+      color: var(--web-d, #2b6cb0);
+    }
+  </style>
 </head>
 <body>
+
+  <nav class="main-navbar">
+    <div class="navbar-brand">ARCO</div>
+    <div class="navbar-links">
+      <a href="index.html" class="nav-link">Chat</a>
+      <a href="dashboard.html" class="nav-link active">Métricas de Producción</a>
+      <a href="benchmark.html" class="nav-link">Comparativa Benchmark</a>
+    </div>
+  </nav>
 
 <div class="header-row mb16">
   <div>
