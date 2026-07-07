@@ -174,9 +174,14 @@
       vertical-align: middle;
     }
 
-    .badge-model {
+    .badge-granite {
       background: #E6F1FB;
       color: #0C447C;
+    }
+
+    .badge-qwen {
+      background: #EAF3DE;
+      color: #27500A;
     }
 
     .badge-fallback {
@@ -257,12 +262,55 @@
       0% { background-position: 200% 0; }
       100% { background-position: -200% 0; }
     }
+    .feedback-btns {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px solid #d9e2ec;
+    }
+
+    .fb-btn {
+      padding: 4px 12px;
+      border: 1px solid #cfd8e3;
+      border-radius: 20px;
+      font-size: 12px;
+      cursor: pointer;
+      background: white;
+      color: black;
+    }
+
+    .fb-btn:hover {
+      background: #f4f7fb;
+    }
+
+    .fb-btn.selected-pos {
+      background: #dcfce7;
+      border-color: #166534;
+      color: #166534;
+    }
+
+    .fb-btn.selected-neg {
+      background: #fee2e2;
+      border-color: #991b1b;
+      color: #991b1b;
+    }
+
+    .fb-thanks {
+      font-size: 12px;
+      color: #555;
+      margin-top: 8px;
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <h1>ARCO</h1>
     <p class="subtitle">Asistente para el Registro Civil y su Orientación</p>
+
+    <div class="model-selector">
+      <span id="modelLabel">Modelo: cargando…</span>
+    </div>
 
     <div class="chat-box" id="chatBox">
       <div class="message assistant-message">
@@ -282,10 +330,20 @@
 
     const askButton  = document.getElementById("askButton");
     const queryInput = document.getElementById("query");
+    const modelLabelEl = document.getElementById("modelLabel");
     const chatBox    = document.getElementById("chatBox");
 
     const history = [];
     let currentContext = null;
+
+    fetch(`${API}/models`)
+      .then(r => r.json())
+      .then(data => {
+        modelLabelEl.textContent = `Modelo: ${data.label || "desconocido"}`;
+      })
+      .catch(() => {
+        modelLabelEl.textContent = "Modelo: no se pudo conectar con el backend";
+      });
 
     function addMessage(role, htmlContent) {
       const message = document.createElement("div");
@@ -315,7 +373,14 @@
 
     function buildAssistantHtml(data) {
       const label      = data.fallback ? "Fallback" : (data.model_used || "ARCO");
-      const badgeClass = data.fallback ? "badge-fallback" : "badge-model";
+      const badgeClass = data.fallback
+        ? "badge-fallback"
+        : (data.model_used && data.model_used.toLowerCase().includes("qwen") ? "badge-qwen" : "badge-granite");
+      const perf = data.fallback
+        ? ""
+        : `<p><strong>Tiempo de respuesta:</strong> ${data.latency_ms ?? "—"} ms` +
+          (data.ttft_ms != null ? ` (primer token: ${data.ttft_ms} ms)` : "") +
+          `</p>`;
       return `
         <div>${escapeHtml(data.respuesta || "No disponible")}</div>
         <div class="meta">
@@ -330,9 +395,42 @@
               ? `<a href="${data.fuente}" target="_blank">${data.fuente}</a>`
               : "No disponible"
           }</p>
+          ${perf}
           <p><strong>Modelo:</strong> <span class="model-badge ${badgeClass}">${label}</span></p>
         </div>
+        ${buildFeedbackHtml(data.trace_id)}
       `;
+    }
+
+    function buildFeedbackHtml(traceId) {
+      if (!traceId) return "";
+      return `
+        <div class="feedback-btns" data-trace-id="${traceId}">
+          <span style="font-size:12px;color:#555;align-self:center">¿Te sirvió esta respuesta?</span>
+          <button class="fb-btn" onclick="sendFeedback('${traceId}', 1.0, this)">👍 Útil</button>
+          <button class="fb-btn" onclick="sendFeedback('${traceId}', 0.5, this)">🤔 Neutral</button>
+          <button class="fb-btn" onclick="sendFeedback('${traceId}', 0.0, this)">👎 No útil</button>
+        </div>
+      `;
+    }
+
+    async function sendFeedback(traceId, score, btn) {
+      try {
+        await fetch(`${API}/feedback`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ trace_id: traceId, score }),
+        });
+        const container = btn.closest(".feedback-btns");
+        container.querySelectorAll(".fb-btn").forEach(b => b.classList.remove("selected-pos", "selected-neg"));
+        const cls = score >= 0.8 ? "selected-pos" : score <= 0.2 ? "selected-neg" : null;
+        if (cls) btn.classList.add(cls);
+        if (!container.querySelector(".fb-thanks")) {
+          container.insertAdjacentHTML("beforeend", `<span class="fb-thanks">¡Gracias por tu feedback!</span>`);
+        }
+      } catch (error) {
+        console.error("No se pudo enviar el feedback", error);
+      }
     }
 
     function callAsk(query) {

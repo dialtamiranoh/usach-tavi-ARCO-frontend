@@ -1,0 +1,1116 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ARCO — Dashboard de métricas</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #f4f7fb;
+    --surface:   #ffffff;
+    --border:    #e2e8f0;
+    --text:      #1e293b;
+    --muted:     #64748b;
+
+    /* categorical roles — validated with scripts/validate_palette.js (light, surface #ffffff) */
+    --web:       #2a78d6;  /* blue   */
+    --web-l:     #E6F1FB;
+    --web-d:     #0C447C;
+    --web-fill:  #E6F1FB;
+    --web-2:     #6da7ec; /* lighter blue, same family — TTFT line in per-channel charts */
+    --whatsapp:  #008300;  /* green  */
+    --whatsapp-l:#E4F3E4;
+    --whatsapp-d:#0A5A0A;
+    --whatsapp-2:#4CAF50; /* lighter green, same family — TTFT line in per-channel charts */
+    --latencia:  #2a78d6;  /* blue   */
+    --ttft:      #eb6834;  /* orange */
+    --ttft-fill: #FCEBE2;
+    --violet:    #4a3aa7;
+
+    --good:      #0ca30c;
+    --critical:  #d03b3b;
+
+    /* feedback donut — validated categorical triplet (light, surface #ffffff) */
+    --fb-pos:    #008300;  /* green  */
+    --fb-neu:    #eda100;  /* yellow — sub-3:1 vs surface, relief via visible labels */
+    --fb-neg:    #e34948;  /* red    */
+
+    /* chart chrome */
+    --chart-grid:  #e1e0d9;
+    --chart-tick:  #898781;
+    --chart-empty: #e2e8f0;
+
+    /* table / status washes */
+    --table-head: #f8fafc;
+    --row-hover:  #f8fafc;
+    --ok-bg: #dcfce7;  --ok-fg: #166534;
+    --err-bg: #fee2e2; --err-fg: #991b1b;
+
+    --radius: 12px;
+  }
+
+  /* Dark mode — own steps against the dark surface, selected via toggle (not an automatic flip) */
+  html[data-theme="dark"] {
+    color-scheme: dark;
+    --bg:        #0f172a;
+    --surface:   #1e293b;
+    --border:    #334155;
+    --text:      #e2e8f0;
+    --muted:     #94a3b8;
+
+    --web:       #3987e5;
+    --web-l:     rgba(57,135,229,0.16);
+    --web-d:     #93c5fd;
+    --web-fill:  rgba(57,135,229,0.18);
+    --web-2:     #86b6ef;
+    --whatsapp:  #008300;
+    --whatsapp-l:rgba(0,131,0,0.20);
+    --whatsapp-d:#4ade80;
+    --whatsapp-2:#4ade80;
+    --latencia:  #3987e5;
+    --ttft:      #d95926;
+    --ttft-fill: rgba(217,89,38,0.18);
+    --violet:    #9085e9;
+
+    --good:      #0ca30c;
+    --critical:  #d03b3b;
+
+    --fb-pos:    #008300;
+    --fb-neu:    #c98500;
+    --fb-neg:    #e66767;
+
+    --chart-grid:  #2c2c2a;
+    --chart-tick:  #9aa5b8;
+    --chart-empty: #334155;
+
+    --table-head: #1a2233;
+    --row-hover:  #1a2233;
+    --ok-bg: rgba(34,197,94,0.16);   --ok-fg: #4ade80;
+    --err-bg: rgba(248,113,113,0.16); --err-fg: #f87171;
+  }
+
+  html[data-theme="dark"] .btn-primary { background: #3b5bdb; }
+  html[data-theme="dark"] .btn-primary:hover { background: #2f4bc4; }
+
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); padding: 24px;
+         transition: background-color .15s ease, color .15s ease; }
+
+  h1 { font-size: 22px; font-weight: 500; margin-bottom: 4px; }
+  .subtitle { font-size: 13px; color: var(--muted); margin-bottom: 24px; }
+
+  /* ── Tabs ── */
+  .tabs { display: flex; gap: 4px; margin-bottom: 24px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .tab  { padding: 8px 16px; font-size: 14px; cursor: pointer; border: none; background: none;
+          color: var(--muted); border-bottom: 2px solid transparent; transition: all .15s; }
+  .tab.active { color: var(--text); border-bottom-color: #1f3c88; font-weight: 500; }
+
+  /* ── Cards ── */
+  .card { background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border); padding: 20px; }
+  .card-title { font-size: 12px; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: .5px; }
+  .card-val   { font-size: 26px; font-weight: 500; }
+  .card-val-text { font-size: 16px; font-weight: 500; line-height: 1.3; }
+  .card-sub   { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+  /* ── Grids ── */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+
+  .mb16 { margin-bottom: 16px; }
+  .mb24 { margin-bottom: 24px; }
+
+  .metric-row { display: flex; justify-content: space-between; font-size: 13px; padding: 5px 0; border-bottom: 1px solid var(--border); }
+  .metric-row:last-child { border-bottom: none; }
+  .metric-row .label { color: var(--muted); }
+  .metric-row .val   { font-weight: 500; font-variant-numeric: tabular-nums; }
+
+  /* ── Table ── */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th { background: var(--table-head); color: var(--muted); padding: 10px 12px; text-align: left;
+             border-bottom: 1px solid var(--border); font-weight: 500; font-size: 12px; }
+  tbody td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; font-variant-numeric: tabular-nums; }
+  tbody tr:hover { background: var(--row-hover); }
+  tbody tr:last-child td { border-bottom: none; }
+
+  /* ── Badges ── */
+  .badge { font-size: 11px; padding: 2px 8px; border-radius: 20px; display: inline-block; }
+  .badge-web { background: var(--web-l); color: var(--web-d); }
+  .badge-wa  { background: var(--whatsapp-l); color: var(--whatsapp-d); }
+  .badge-ok  { background: var(--ok-bg); color: var(--ok-fg); }
+  .badge-err { background: var(--err-bg); color: var(--err-fg); }
+
+  /* ── Consultador ── */
+  .response-panel { border-radius: var(--radius); border: 1px solid var(--border); border-top: 3px solid var(--web);
+                    padding: 16px; min-height: 160px; font-size: 14px; line-height: 1.6; }
+  .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .panel-title  { font-size: 13px; font-weight: 500; }
+  .meta-pill    { font-size: 11px; color: var(--muted); }
+  .response-text { color: var(--text); }
+  .response-empty { color: var(--muted); font-style: italic; font-size: 13px; }
+
+  .query-bar { display: flex; gap: 10px; margin-bottom: 16px; }
+  .btn { padding: 10px 20px; border-radius: 30px; border: none; cursor: pointer; font-size: 14px; font-weight: 500; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn-primary { background: #1f3c88; color: white; }
+  .btn-primary:hover { background: #0f2c6b; }
+  .btn-primary:disabled { background: #94a3b8; cursor: not-allowed; }
+
+  .feedback-btns { display: flex; gap: 8px; margin-top: 12px; }
+  .fb-btn { padding: 4px 12px; border: 1px solid var(--border); border-radius: 20px;
+            font-size: 12px; cursor: pointer; background: var(--surface); }
+  .fb-btn:hover { background: var(--bg); }
+  .fb-btn.selected-pos { background: var(--ok-bg); border-color: var(--ok-fg); color: var(--ok-fg); }
+  .fb-btn.selected-neg { background: var(--err-bg); border-color: var(--err-fg); color: var(--err-fg); }
+
+  /* ── Detail modal ── */
+  .detail-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+                     display: flex; align-items: flex-start; justify-content: center;
+                     padding: 40px 16px; overflow-y: auto; z-index: 100; }
+  .detail-modal { width: 100%; max-width: 640px; max-height: 85vh; overflow-y: auto; }
+
+  /* ── Theme toggle ── */
+  .header-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+  .theme-toggle { width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--border);
+                  background: var(--surface); font-size: 17px; cursor: pointer; flex-shrink: 0;
+                  display: flex; align-items: center; justify-content: center; }
+  .theme-toggle:hover { background: var(--bg); }
+
+  /* ── Chart wrappers ── */
+  .chart-wrap { position: relative; }
+  .chart-legend { display: flex; gap: 16px; font-size: 12px; color: var(--muted); margin-bottom: 8px; flex-wrap: wrap; }
+  .chart-legend span.dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+
+  /* ── Section headings ── */
+  .section-title { font-size: 15px; font-weight: 500; margin-bottom: 12px; }
+
+  /* ── Spinner ── */
+  .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #e2e8f0;
+             border-top-color: #1f3c88; border-radius: 50%; animation: spin .7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Responsive ── */
+  @media (max-width: 700px) {
+    .grid-4, .grid-3 { grid-template-columns: 1fr 1fr; }
+    .grid-2 { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header-row mb16">
+  <div>
+    <h1>📊 ARCO — Dashboard de métricas</h1>
+    <p class="subtitle" id="lastUpdated">Cargando datos…</p>
+  </div>
+  <button id="themeToggle" class="theme-toggle" onclick="toggleTheme()" title="Cambiar tema" aria-label="Cambiar tema claro/oscuro">🌙</button>
+</div>
+
+<!-- Tabs -->
+<div class="tabs">
+  <button class="tab active" onclick="showTab('resumen')">Resumen</button>
+  <button class="tab" onclick="showTab('consultar')">Consultar en vivo</button>
+  <button class="tab" onclick="showTab('equipo')">WhatsApp por integrante</button>
+  <button class="tab" onclick="showTab('historial')">Historial</button>
+</div>
+
+<!-- ════════════════════════════════════════════════
+     TAB 1 — RESUMEN
+════════════════════════════════════════════════ -->
+<div id="tab-resumen">
+
+  <div class="grid-4 mb24" id="summaryTiles">
+    <div class="card">
+      <p class="card-title">Consultas totales</p>
+      <p class="card-val" id="s-total">—</p>
+      <p class="card-sub" id="s-total-sub">—</p>
+    </div>
+    <div class="card">
+      <p class="card-title">Latencia promedio</p>
+      <p class="card-val" id="s-lat">—</p>
+      <p class="card-sub" id="s-lat-p95">—</p>
+    </div>
+    <div class="card">
+      <p class="card-title">Tiempo al primer token (TTFT)</p>
+      <p class="card-val" id="s-ttft">—</p>
+      <p class="card-sub" id="s-ttft-p95">—</p>
+    </div>
+    <div class="card">
+      <p class="card-title">Velocidad de generación</p>
+      <p class="card-val" id="s-tps">—</p>
+      <p class="card-sub">tokens de salida por segundo, sin contar el prefill (TTFT)</p>
+    </div>
+  </div>
+
+  <div class="grid-4 mb24">
+    <div class="card">
+      <p class="card-title">Total token (Costo estimado, hoy)</p>
+      <p class="card-val" id="s-cost">—</p>
+      <p class="card-sub" id="s-cost-sub">—</p>
+    </div>
+    <div class="card">
+      <p class="card-title">Consultas por hora</p>
+      <p class="card-val" id="s-throughput">—</p>
+      <p class="card-sub">promedio a lo largo del historial registrado</p>
+    </div>
+    <div class="card">
+      <p class="card-title">Memoria del backend</p>
+      <p class="card-val" id="s-memoria">—</p>
+      <p class="card-sub">RAM usada por el proceso ahora mismo</p>
+    </div>
+    <div class="card">
+      <p class="card-title">Accuracy de enrutamiento</p>
+      <p class="card-val" id="s-eval">—</p>
+      <p class="card-sub" id="s-eval-sub">—</p>
+    </div>
+  </div>
+
+  <div class="grid-2 mb24">
+    <div class="card">
+      <p class="section-title">Latencia y TTFT en el tiempo — Web (últimas 20 consultas)</p>
+      <div class="chart-legend">
+        <span><span class="dot" style="background:var(--web)"></span>Latencia total</span>
+        <span><span class="dot" style="background:var(--web-2)"></span>Tiempo al primer token</span>
+      </div>
+      <div class="chart-wrap" style="height:220px">
+        <canvas id="chartLatencyWeb" role="img" aria-label="Latencia y TTFT en el tiempo, canal Web"></canvas>
+      </div>
+    </div>
+    <div class="card">
+      <p class="section-title">Latencia y TTFT en el tiempo — WhatsApp (últimas 20 consultas)</p>
+      <div class="chart-legend">
+        <span><span class="dot" style="background:var(--whatsapp)"></span>Latencia total</span>
+        <span><span class="dot" style="background:var(--whatsapp-2)"></span>Tiempo al primer token</span>
+      </div>
+      <div class="chart-wrap" style="height:220px">
+        <canvas id="chartLatencyWhatsapp" role="img" aria-label="Latencia y TTFT en el tiempo, canal WhatsApp"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid-2 mb24">
+    <div class="card">
+      <p class="section-title">Trámites más consultados</p>
+      <div class="chart-wrap" style="height:260px">
+        <canvas id="chartTramites" role="img" aria-label="Trámites más consultados"></canvas>
+      </div>
+    </div>
+    <div class="card">
+      <p class="section-title">Memoria del backend en el tiempo (últimas 30 consultas)</p>
+      <div class="chart-legend">
+        <span><span class="dot" style="background:var(--violet)"></span>RAM usada (MB)</span>
+      </div>
+      <div class="chart-wrap" style="height:260px">
+        <canvas id="chartMemoria" role="img" aria-label="Memoria del backend en el tiempo"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid-2 mb24">
+    <div class="card">
+      <p class="section-title">Consultas por canal</p>
+      <div class="chart-legend" id="channelsLegend"></div>
+      <div class="chart-wrap" style="height:220px">
+        <canvas id="chartChannels" role="img" aria-label="Consultas por canal"></canvas>
+      </div>
+    </div>
+    <div class="card">
+      <p class="section-title">Feedback de los usuarios</p>
+      <div class="chart-legend" id="feedbackLegend"></div>
+      <div class="chart-wrap" style="height:220px">
+        <canvas id="chartFeedback" role="img" aria-label="Distribución de feedback positivo, neutral y negativo"></canvas>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ════════════════════════════════════════════════
+     TAB 2 — CONSULTAR EN VIVO
+════════════════════════════════════════════════ -->
+<div id="tab-consultar" style="display:none">
+
+  <div class="card mb16" id="lastQueryCard" style="display:none;padding:14px 20px">
+    <p class="card-title">Última consulta</p>
+    <p id="lastQueryText" style="font-size:14px;margin-top:6px;color:var(--text)"></p>
+  </div>
+
+  <div class="response-panel card mb16" id="responsePanel">
+    <div class="panel-header">
+      <span class="panel-title"><span class="badge badge-web" id="r-channel-badge">Web</span></span>
+      <span class="meta-pill" id="r-meta"></span>
+    </div>
+    <div id="r-response" class="response-empty">Sin respuestas aún. Envía una consulta desde index.html o WhatsApp.</div>
+    <div class="feedback-btns" id="r-fb-btns" style="display:none">
+      <button class="fb-btn" onclick="sendFeedback(1.0, this)">👍 Útil</button>
+      <button class="fb-btn" onclick="sendFeedback(0.5, this)">🤔 Neutral</button>
+      <button class="fb-btn" onclick="sendFeedback(0.0, this)">👎 No útil</button>
+    </div>
+  </div>
+
+  <div class="grid-4 mb16" id="queryStatsSection" style="display:none">
+    <div class="card">
+      <p class="card-title">Latencia total</p>
+      <p class="card-val" id="qs-lat">—</p>
+    </div>
+    <div class="card">
+      <p class="card-title">Tiempo al primer token</p>
+      <p class="card-val" id="qs-ttft">—</p>
+    </div>
+    <div class="card">
+      <p class="card-title">Tokens totales</p>
+      <p class="card-val" id="qs-tok">—</p>
+      <p class="card-sub" id="qs-tok-sub">—</p>
+    </div>
+    <div class="card">
+      <p class="card-title">Velocidad de generación</p>
+      <p class="card-val" id="qs-tps">—</p>
+      <p class="card-sub">solo tokens de salida, sin contar el prefill (TTFT)</p>
+    </div>
+  </div>
+
+  <div class="grid-4" id="queryStatsSection2" style="display:none">
+    <div class="card">
+      <p class="card-title">Trámite</p>
+      <p class="card-val card-val-text" id="qs-tramite">—</p>
+    </div>
+    <div class="card">
+      <p class="card-title">Canal</p>
+      <p class="card-val card-val-text" id="qs-canal">—</p>
+      <p class="card-sub" id="qs-canal-sub">—</p>
+    </div>
+    <div class="card">
+      <p class="card-title">Fallback</p>
+      <p class="card-val card-val-text" id="qs-fb">—</p>
+    </div>
+    <div class="card">
+      <p class="card-title">Feedback del usuario</p>
+      <p class="card-val card-val-text" id="qs-feedback">—</p>
+    </div>
+  </div>
+
+</div>
+
+<!-- ════════════════════════════════════════════════
+     TAB 3 — WHATSAPP POR INTEGRANTE
+════════════════════════════════════════════════ -->
+<div id="tab-equipo" style="display:none">
+
+  <div class="card mb24">
+    <p class="section-title">Consultas por integrante (WhatsApp)</p>
+    <div class="chart-wrap" style="height:220px">
+      <canvas id="chartTeam" role="img" aria-label="Consultas por integrante en WhatsApp"></canvas>
+    </div>
+  </div>
+
+  <div style="overflow-x:auto">
+    <table>
+      <thead>
+        <tr>
+          <th>Integrante</th><th>Consultas</th><th>Latencia promedio</th>
+          <th>TTFT promedio</th><th>Fallback</th><th>Feedback positivo</th><th>Última consulta</th>
+        </tr>
+      </thead>
+      <tbody id="teamBody"></tbody>
+    </table>
+  </div>
+
+</div>
+
+<!-- ════════════════════════════════════════════════
+     TAB 4 — HISTORIAL
+════════════════════════════════════════════════ -->
+<div id="tab-historial" style="display:none">
+  <div class="card mb16" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:14px 20px">
+    <input type="text" id="histSearch" placeholder="Buscar consulta o trámite…"
+           style="padding:7px 14px;border:1px solid var(--border);border-radius:30px;font-size:13px;outline:none;flex:1;min-width:180px;background:var(--surface);color:var(--text)"
+           oninput="filterHistory()">
+    <select id="histChannel" onchange="filterHistory()"
+            style="padding:7px 12px;border:1px solid var(--border);border-radius:30px;font-size:13px;background:var(--surface);color:var(--text)">
+      <option value="">Todos los canales</option>
+      <option value="web">Web</option>
+      <option value="whatsapp">WhatsApp</option>
+    </select>
+    <select id="histFallback" onchange="filterHistory()"
+            style="padding:7px 12px;border:1px solid var(--border);border-radius:30px;font-size:13px;background:var(--surface);color:var(--text)">
+      <option value="">Todos</option>
+      <option value="ok">Sin fallback</option>
+      <option value="err">Con fallback</option>
+    </select>
+  </div>
+  <div style="overflow-x:auto">
+    <table>
+      <thead>
+        <tr>
+          <th>Fecha</th><th>Canal</th><th>Integrante</th><th>Trámite</th><th>Consulta</th>
+          <th>Latencia</th><th>TTFT</th><th>Tokens</th><th>Fallback</th><th>Feedback</th><th></th>
+        </tr>
+      </thead>
+      <tbody id="histBody"></tbody>
+    </table>
+  </div>
+
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-top:14px">
+    <span style="font-size:13px;color:var(--muted)" id="histRangeInfo">—</span>
+    <div style="display:flex;align-items:center;gap:8px">
+      <button class="btn" id="histPrevBtn" onclick="histGoToPage(histPage - 1)"
+              style="background:#f1f5f9;color:#475569;border:1px solid #cbd5e1;font-size:13px;padding:6px 14px">
+        ‹ Anterior
+      </button>
+      <span style="font-size:13px;color:var(--muted)" id="histPageInfo">—</span>
+      <button class="btn" id="histNextBtn" onclick="histGoToPage(histPage + 1)"
+              style="background:#f1f5f9;color:#475569;border:1px solid #cbd5e1;font-size:13px;padding:6px 14px">
+        Siguiente ›
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════
+     MODAL — Detalle completo de una consulta
+════════════════════════════════════════════════ -->
+<div id="detailOverlay" class="detail-overlay" style="display:none" onclick="if(event.target===this) closeDetail()">
+  <div class="detail-modal card">
+    <div class="panel-header mb16">
+      <span class="section-title" style="margin:0">Detalle de la consulta</span>
+      <button class="theme-toggle" style="width:32px;height:32px;font-size:14px" onclick="closeDetail()" aria-label="Cerrar">✕</button>
+    </div>
+    <div class="metric-row"><span class="label">Fecha</span><span class="val" id="d-fecha">—</span></div>
+    <div class="metric-row"><span class="label">Canal</span><span class="val" id="d-canal">—</span></div>
+    <div class="metric-row"><span class="label">Integrante / Número</span><span class="val" id="d-integrante">—</span></div>
+    <div class="metric-row"><span class="label">Trámite</span><span class="val" id="d-tramite">—</span></div>
+    <div class="metric-row"><span class="label">Latencia total</span><span class="val" id="d-lat">—</span></div>
+    <div class="metric-row"><span class="label">TTFT</span><span class="val" id="d-ttft">—</span></div>
+    <div class="metric-row"><span class="label">Tokens (entrada/salida/total)</span><span class="val" id="d-tok">—</span></div>
+    <div class="metric-row"><span class="label">Fallback</span><span class="val" id="d-fb">—</span></div>
+    <div class="metric-row"><span class="label">Feedback</span><span class="val" id="d-feedback">—</span></div>
+
+    <p class="card-title" style="margin-top:16px">Consulta del usuario</p>
+    <p id="d-query" style="font-size:14px;margin-top:4px"></p>
+
+    <p class="card-title" style="margin-top:16px">Respuesta de ARCO</p>
+    <p id="d-respuesta" style="font-size:14px;margin-top:4px;line-height:1.5"></p>
+
+    <div id="d-error-wrap" style="display:none">
+      <p class="card-title" style="margin-top:16px;color:var(--err-fg)">Error</p>
+      <p id="d-error" style="font-size:13px;margin-top:4px;color:var(--err-fg)"></p>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = "http://127.0.0.1:8000";
+let allMetrics   = [];
+let statsGlobal  = null;
+let statsTeam    = null;
+let lastTraceId  = null;
+let feedbackState = {};
+let chartChannels, chartTeam, chartTramites, chartFeedback, chartMemoria;
+let channelTimeCharts = {};
+
+const SIMULATED_RATE_PER_1K_TOKENS = 0.0002; // USD — tarifa simulada estilo modelo pequeño hospedado (~$0.20 / 1M tok)
+const NO_MATCH_TRAMITES = new Set(['No identificado', 'Fuera del alcance']);
+
+/* ── Theme ── */
+function cvar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+function theme() { return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light'; }
+
+function applyTheme(t) {
+  document.documentElement.setAttribute('data-theme', t);
+  const btn = document.getElementById('themeToggle');
+  if (btn) btn.textContent = t === 'dark' ? '☀️' : '🌙';
+}
+
+function toggleTheme() {
+  const next = theme() === 'dark' ? 'light' : 'dark';
+  localStorage.setItem('arco-theme', next);
+  applyTheme(next);
+  renderCharts();
+  renderTeam();
+}
+
+/* ── Tab switching ── */
+async function showTab(name) {
+  const tabs = ['resumen','consultar','equipo','historial'];
+  tabs.forEach(t => {
+    document.getElementById('tab-' + t).style.display = t === name ? '' : 'none';
+  });
+  document.querySelectorAll('.tab').forEach((el, i) => {
+    el.classList.toggle('active', tabs[i] === name);
+  });
+  await loadAll();
+  if (name === 'historial') renderHistory();
+}
+
+/* ── Fetch data ── */
+async function loadAll() {
+  try {
+    const [metrics, stats, team] = await Promise.all([
+      fetch(`${API}/metrics`).then(r => r.json()),
+      fetch(`${API}/stats`).then(r => r.json()),
+      fetch(`${API}/stats/whatsapp`).then(r => r.json()),
+    ]);
+    allMetrics    = Array.isArray(metrics) ? metrics : [];
+    statsGlobal   = stats && !stats.error ? stats : null;
+    statsTeam     = team || {};
+
+    renderSummary();
+    renderCharts();
+    renderTeam();
+    renderLastResponse();
+
+    document.getElementById('lastUpdated').textContent =
+      'Última actualización: ' + new Date().toLocaleTimeString('es-CL');
+  } catch(e) {
+    document.getElementById('lastUpdated').textContent = '⚠️ No se pudo conectar con el backend (puerto 8000)';
+  }
+}
+
+/* ── Tab 1: resumen ── */
+function renderSummary() {
+  const s = statsGlobal;
+  if (!s) return;
+  setText('s-total', s.total_consultas ?? '—');
+  setText('s-total-sub', `Web: ${s.consultas_web ?? 0} · WhatsApp: ${s.consultas_whatsapp ?? 0}`);
+  setText('s-lat', fms(s.promedio_latencia_ms));
+  setText('s-lat-p95', `p95: ${fms(s.p95_latencia_ms)}`);
+  setText('s-ttft', fms(s.promedio_ttft_ms));
+  setText('s-ttft-p95', `p95: ${fms(s.p95_ttft_ms)}`);
+
+  setText('s-tps', s.tokens_por_segundo ? `${s.tokens_por_segundo} tok/s` : '—');
+
+  setText('s-throughput', s.consultas_por_hora ? `${s.consultas_por_hora}/h` : '—');
+  setText('s-memoria', s.memoria_mb ? `${s.memoria_mb} MB` : '—');
+
+  if (s.eval_accuracy != null) {
+    setText('s-eval', `${s.eval_accuracy}%`);
+    setText('s-eval-sub',
+      `${s.eval_correctos}/${s.eval_total_casos} casos · ${s.eval_aprobado ? '✅ aprobado' : '⚠️ bajo el mínimo'} (${s.eval_accuracy_minima}%)`);
+  } else {
+    setText('s-eval', '—');
+    setText('s-eval-sub', 'corre python eval/evaluador.py para generar un reporte');
+  }
+
+  const today = todayStr();
+  const tokToday = allMetrics
+    .filter(m => (m.timestamp || '').startsWith(today))
+    .reduce((sum, m) => sum + (m.total_tokens || 0), 0);
+  const cost = tokToday / 1000 * SIMULATED_RATE_PER_1K_TOKENS;
+  setText('s-cost', tokToday.toLocaleString('es-CL') + ' tok');
+  setText('s-cost-sub',
+    `hoy · ≈ $${cost.toFixed(4)} USD simulado · $${(SIMULATED_RATE_PER_1K_TOKENS * 1000).toFixed(2)}/1M tok`);
+}
+
+function todayStr() {
+  const d = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/* ── Charts ── */
+function renderCharts() {
+  Chart.defaults.color = cvar('--chart-tick');
+  Chart.defaults.borderColor = cvar('--chart-grid');
+  renderChannelTimeChart('chartLatencyWeb', 'web', '--web', '--web-2');
+  renderChannelTimeChart('chartLatencyWhatsapp', 'whatsapp', '--whatsapp', '--whatsapp-2');
+  renderChannelsChart();
+  renderMemoriaChart();
+  renderTramitesChart();
+  renderFeedbackChart();
+}
+
+function renderMemoriaChart() {
+  const sorted = allMetrics
+    .filter(m => m.memoria_mb != null)
+    .sort((a, b) => a.timestamp.localeCompare(b.timestamp))
+    .slice(-30);
+  const labels = sorted.map(m => (m.timestamp || '').slice(11, 19));
+  const data = sorted.map(m => m.memoria_mb);
+  const grid = cvar('--chart-grid'), tick = cvar('--chart-tick'), violet = cvar('--violet');
+
+  if (chartMemoria) chartMemoria.destroy();
+  chartMemoria = new Chart(document.getElementById('chartMemoria'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'RAM usada (MB)', data,
+        borderColor: violet, backgroundColor: violet,
+        borderWidth: 2, pointRadius: 3, tension: 0.3, fill: false,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false } },
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        x: { ticks: { maxRotation: 45, font: { size: 10 }, color: tick }, grid: { color: grid } },
+        y: { ticks: { font: { size: 10 }, color: tick }, grid: { color: grid },
+             title: { display: true, text: 'MB', font: { size: 10 }, color: tick } },
+      },
+    },
+  });
+}
+
+function renderChannelTimeChart(canvasId, channel, primaryVar, secondaryVar) {
+  const sorted = allMetrics
+    .filter(m => m.channel === channel && !NO_MATCH_TRAMITES.has(m.tramite))
+    .sort((a, b) => a.timestamp.localeCompare(b.timestamp))
+    .slice(-20);
+  const labels = sorted.map(m => (m.timestamp || '').slice(11, 19));
+  const latData = sorted.map(m => m.latency_ms || null);
+  const ttftData = sorted.map(m => m.ttft_ms || null);
+  const grid = cvar('--chart-grid'), tick = cvar('--chart-tick');
+  const primary = cvar(primaryVar), secondary = cvar(secondaryVar);
+
+  if (channelTimeCharts[channel]) channelTimeCharts[channel].destroy();
+  channelTimeCharts[channel] = new Chart(document.getElementById(canvasId), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Latencia total', data: latData,
+          borderColor: primary, backgroundColor: primary,
+          borderWidth: 2, pointRadius: 3, tension: 0.3, fill: false,
+        },
+        {
+          label: 'TTFT', data: ttftData,
+          borderColor: secondary, backgroundColor: secondary,
+          borderWidth: 2, pointRadius: 3, tension: 0.3, fill: false,
+          borderDash: [5, 3],
+        },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false } },
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        x: { ticks: { maxRotation: 45, font: { size: 10 }, color: tick }, grid: { color: grid } },
+        y: { ticks: { font: { size: 10 }, color: tick }, grid: { color: grid },
+             title: { display: true, text: 'ms', font: { size: 10 }, color: tick } },
+      },
+    },
+  });
+}
+
+function renderChannelsChart() {
+  const web = allMetrics.filter(m => m.channel === 'web').length;
+  const wa  = allMetrics.filter(m => m.channel === 'whatsapp').length;
+  const total = web + wa;
+
+  const legend = document.getElementById('channelsLegend');
+  if (legend) {
+    if (!total) {
+      legend.innerHTML = '<span style="color:var(--muted)">Sin consultas aún</span>';
+    } else {
+      const pct = n => Math.round(n / total * 100);
+      legend.innerHTML = `
+        <span><span class="dot" style="background:var(--web)"></span>Web ${pct(web)}% (${web})</span>
+        <span><span class="dot" style="background:var(--whatsapp)"></span>WhatsApp ${pct(wa)}% (${wa})</span>
+      `;
+    }
+  }
+
+  if (chartChannels) chartChannels.destroy();
+  chartChannels = new Chart(document.getElementById('chartChannels'), {
+    type: 'doughnut',
+    data: {
+      labels: ['Web', 'WhatsApp'],
+      datasets: [{
+        data: [web, wa],
+        backgroundColor: [cvar('--web'), cvar('--whatsapp')],
+        borderColor: cvar('--surface'), borderWidth: 2,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+    },
+  });
+}
+
+function renderTramitesChart() {
+  const counts = {};
+  allMetrics.forEach(m => {
+    const nombre = m.tramite || 'Sin identificar';
+    counts[nombre] = (counts[nombre] || 0) + 1;
+  });
+  const ranked = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  const labels = ranked.map(r => r[0]);
+  const values = ranked.map(r => r[1]);
+  const grid = cvar('--chart-grid'), tick = cvar('--chart-tick');
+
+  if (chartTramites) chartTramites.destroy();
+  chartTramites = new Chart(document.getElementById('chartTramites'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Consultas',
+        data: values,
+        backgroundColor: cvar('--web-fill'), borderColor: cvar('--web'), borderWidth: 1, borderRadius: 4,
+      }],
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { font: { size: 10 }, precision: 0, color: tick }, grid: { color: grid } },
+        y: { ticks: { font: { size: 11 }, color: tick }, grid: { display: false } },
+      },
+    },
+  });
+}
+
+function renderFeedbackChart() {
+  const s = statsGlobal || {};
+  const pos = s.feedback_positivos || 0;
+  const neu = s.feedback_neutral || 0;
+  const neg = s.feedback_negativos || 0;
+  const total = pos + neu + neg;
+
+  const legend = document.getElementById('feedbackLegend');
+  if (legend) {
+    if (!total) {
+      legend.innerHTML = '<span style="color:var(--muted)">Aún no hay feedback registrado</span>';
+    } else {
+      const pct = n => Math.round(n / total * 100);
+      legend.innerHTML = `
+        <span><span class="dot" style="background:var(--fb-pos)"></span>Positivo ${pct(pos)}% (${pos})</span>
+        <span><span class="dot" style="background:var(--fb-neu)"></span>Neutral ${pct(neu)}% (${neu})</span>
+        <span><span class="dot" style="background:var(--fb-neg)"></span>Negativo ${pct(neg)}% (${neg})</span>
+      `;
+    }
+  }
+
+  if (chartFeedback) chartFeedback.destroy();
+  chartFeedback = new Chart(document.getElementById('chartFeedback'), {
+    type: 'doughnut',
+    data: {
+      labels: ['Positivo', 'Neutral', 'Negativo'],
+      datasets: [{
+        data: total ? [pos, neu, neg] : [1],
+        backgroundColor: total ? [cvar('--fb-pos'), cvar('--fb-neu'), cvar('--fb-neg')] : [cvar('--chart-empty')],
+        borderColor: cvar('--surface'), borderWidth: 2,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+    },
+  });
+}
+
+/* ── Tab 2: equipo (WhatsApp por integrante) ── */
+function renderTeam() {
+  const team = statsTeam || {};
+  const nombres = Object.keys(team);
+
+  Chart.defaults.color = cvar('--chart-tick');
+  Chart.defaults.borderColor = cvar('--chart-grid');
+  const grid = cvar('--chart-grid'), tick = cvar('--chart-tick');
+
+  if (chartTeam) chartTeam.destroy();
+  chartTeam = new Chart(document.getElementById('chartTeam'), {
+    type: 'bar',
+    data: {
+      labels: nombres,
+      datasets: [{
+        label: 'Consultas',
+        data: nombres.map(n => team[n].total_consultas || 0),
+        backgroundColor: cvar('--web-fill'), borderColor: cvar('--web'), borderWidth: 1, borderRadius: 4,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { font: { size: 11 }, color: tick }, grid: { display: false } },
+        y: { ticks: { font: { size: 11 }, precision: 0, color: tick }, grid: { color: grid } },
+      },
+    },
+  });
+
+  const tbody = document.getElementById('teamBody');
+  tbody.innerHTML = '';
+  if (!nombres.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:24px">Sin consultas de WhatsApp aún</td></tr>';
+    return;
+  }
+  nombres.sort((x,y) => (team[y].total_consultas||0) - (team[x].total_consultas||0)).forEach(nombre => {
+    const t = team[nombre];
+    const tr = tbody.insertRow();
+    tr.insertCell(0).textContent = nombre;
+    tr.insertCell(1).textContent = t.total_consultas ?? 0;
+    tr.insertCell(2).textContent = fms(t.promedio_latencia_ms);
+    tr.insertCell(3).textContent = fms(t.promedio_ttft_ms);
+    tr.insertCell(4).textContent = fpct(t.tasa_fallback);
+    tr.insertCell(5).textContent = fpct(t.pct_feedback_positivo);
+    tr.insertCell(6).textContent = (t.ultima_consulta||'').slice(0,16).replace('T',' ') || '—';
+  });
+}
+
+/* ── Tab 4: consultar en vivo ── */
+function renderLastResponse() {
+  const sorted = [...allMetrics].reverse();
+  const last = sorted[0];
+
+  const queryCard = document.getElementById('lastQueryCard');
+  if (!last) {
+    queryCard.style.display = 'none';
+    return;
+  }
+  queryCard.style.display = '';
+  document.getElementById('lastQueryText').textContent = last.user_query || '';
+
+  lastTraceId = last.trace_id;
+  const isWa = last.channel === 'whatsapp';
+  const badge = document.getElementById('r-channel-badge');
+  badge.textContent = isWa ? (last.integrante ? `WhatsApp · ${last.integrante}` : 'WhatsApp') : 'Web';
+  badge.className = 'badge ' + (isWa ? 'badge-wa' : 'badge-web');
+
+  const meta = `${Math.round(last.latency_ms ?? 0)} ms` +
+    (last.ttft_ms ? ` · TTFT ${Math.round(last.ttft_ms)} ms` : '') +
+    ` · ${last.total_tokens ?? 0} tok · ${last.fallback ? '⚠️ fallback' : '✅'}`;
+
+  const score = last.feedback?.score ?? (feedbackState[last.trace_id] ?? null);
+  setPanel(last.respuesta || '—', meta, true, score);
+
+  renderQueryStats(last);
+}
+
+function renderQueryStats(m) {
+  const section  = document.getElementById('queryStatsSection');
+  const section2 = document.getElementById('queryStatsSection2');
+  if (!m) { section.style.display = 'none'; section2.style.display = 'none'; return; }
+  section.style.display  = '';
+  section2.style.display = '';
+
+  setText('qs-lat', fms(m.latency_ms));
+  setText('qs-ttft', fms(m.ttft_ms));
+  setText('qs-tok', m.total_tokens ?? '—');
+  setText('qs-tok-sub', `entrada ${m.input_tokens ?? 0} · salida ${m.output_tokens ?? 0}`);
+
+  const genMs = (m.latency_ms || 0) - (m.ttft_ms || 0);
+  const outTok = m.output_tokens || 0;
+  setText('qs-tps', genMs > 0 && outTok > 0 ? `${(outTok / (genMs / 1000)).toFixed(1)} tok/s` : '—');
+
+  setText('qs-tramite', m.tramite || '—');
+  setText('qs-fb', m.fallback ? '⚠️ Sí' : '✅ No');
+
+  const isWa = m.channel === 'whatsapp';
+  setText('qs-canal', isWa ? 'WhatsApp' : 'Web');
+  if (isWa) {
+    const nombre = m.integrante || 'Desconocido';
+    const numero = m.telefono || m.integrante || '—';
+    setText('qs-canal-sub', nombre !== numero ? `${nombre} · ${numero}` : numero);
+  } else {
+    setText('qs-canal-sub', '—');
+  }
+
+  if (m.feedback) {
+    const s = m.feedback.score;
+    setText('qs-feedback', s >= 0.8 ? '👍 Útil' : s <= 0.2 ? '👎 No útil' : '🤔 Neutral');
+  } else {
+    setText('qs-feedback', 'Sin feedback aún');
+  }
+}
+
+function setPanel(text, meta, showFeedback, feedbackScore) {
+  const el = document.getElementById('r-response');
+  const mt = document.getElementById('r-meta');
+  const fb = document.getElementById('r-fb-btns');
+  el.className = 'response-text';
+  el.innerHTML = text;
+  mt.textContent = meta;
+  if (fb) {
+    const btns = fb.querySelectorAll('.fb-btn');
+    const scores = [1.0, 0.5, 0.0];
+    btns.forEach(b => b.classList.remove('selected-pos', 'selected-neg'));
+    if (feedbackScore != null) {
+      btns.forEach((b, i) => {
+        if (Math.abs(scores[i] - feedbackScore) < 0.01) {
+          const cls = feedbackScore >= 0.8 ? 'selected-pos' : feedbackScore <= 0.2 ? 'selected-neg' : null;
+          if (cls) b.classList.add(cls);
+        }
+      });
+    }
+    fb.style.display = showFeedback ? 'flex' : 'none';
+  }
+}
+
+async function sendFeedback(score, btn) {
+  if (!lastTraceId) return;
+  try {
+    await fetch(`${API}/feedback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ trace_id: lastTraceId, score }),
+    });
+    feedbackState[lastTraceId] = score;
+    const container = btn.closest('.feedback-btns');
+    container.querySelectorAll('.fb-btn').forEach(b => b.classList.remove('selected-pos','selected-neg'));
+    const cls = score >= 0.8 ? 'selected-pos' : score <= 0.2 ? 'selected-neg' : null;
+    if (cls) btn.classList.add(cls);
+  } catch(e) { console.error(e); }
+}
+
+/* ── Tab 5: historial ── */
+function renderHistory() {
+  filterHistory();
+}
+
+const HIST_PAGE_SIZE = 50;
+let histPage = 1;
+let histFiltered = [];
+
+function filterHistory() {
+  const search   = document.getElementById('histSearch').value.toLowerCase();
+  const channel  = document.getElementById('histChannel').value;
+  const fallback = document.getElementById('histFallback').value;
+
+  histFiltered = allMetrics.filter(m => {
+    const matchSearch  = (m.user_query||'').toLowerCase().includes(search) ||
+                         (m.tramite||'').toLowerCase().includes(search);
+    const matchChannel = !channel || m.channel === channel;
+    const matchFb       = !fallback ||
+                         (fallback === 'ok'  && !m.fallback) ||
+                         (fallback === 'err' &&  m.fallback);
+    return matchSearch && matchChannel && matchFb;
+  });
+
+  histPage = 1;
+  renderHistoryPage();
+}
+
+function histGoToPage(page) {
+  const totalPages = Math.max(1, Math.ceil(histFiltered.length / HIST_PAGE_SIZE));
+  histPage = Math.min(Math.max(1, page), totalPages);
+  renderHistoryPage();
+}
+
+function renderHistoryPage() {
+  const tbody = document.getElementById('histBody');
+  tbody.innerHTML = '';
+
+  const totalPages = Math.max(1, Math.ceil(histFiltered.length / HIST_PAGE_SIZE));
+  if (histPage > totalPages) histPage = totalPages;
+
+  const reversed = [...histFiltered].reverse();
+  const start = (histPage - 1) * HIST_PAGE_SIZE;
+  const pageItems = reversed.slice(start, start + HIST_PAGE_SIZE);
+
+  if (!pageItems.length) {
+    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:24px">Sin resultados</td></tr>';
+  } else {
+    pageItems.forEach(m => {
+      const tr = tbody.insertRow();
+      tr.insertCell(0).textContent = (m.timestamp||'').slice(0,16).replace('T',' ');
+      const chCell = tr.insertCell(1);
+      chCell.innerHTML = m.channel === 'whatsapp'
+        ? '<span class="badge badge-wa">WhatsApp</span>'
+        : '<span class="badge badge-web">Web</span>';
+      tr.insertCell(2).textContent = m.integrante || '—';
+      tr.insertCell(3).textContent = m.tramite || '—';
+      const qCell = tr.insertCell(4);
+      qCell.style.maxWidth = '200px';
+      qCell.innerHTML = `<span title="${esc(m.user_query)}">${trunc(m.user_query, 55)}</span>`;
+      tr.insertCell(5).textContent = m.latency_ms ? Math.round(m.latency_ms) + ' ms' : '—';
+      tr.insertCell(6).textContent = m.ttft_ms ? Math.round(m.ttft_ms) + ' ms' : '—';
+      tr.insertCell(7).textContent = m.total_tokens || 0;
+      const fbCell = tr.insertCell(8);
+      fbCell.innerHTML = m.fallback
+        ? '<span class="badge badge-err">⚠️ Sí</span>'
+        : '<span class="badge badge-ok">✅ No</span>';
+      const feedCell = tr.insertCell(9);
+      if (m.feedback) {
+        const s = m.feedback.score;
+        feedCell.textContent = s >= 0.8 ? '👍 Útil' : s <= 0.2 ? '👎 No útil' : '🤔 Neutral';
+      } else {
+        feedCell.innerHTML = '<span style="color:var(--muted)">—</span>';
+      }
+      const verCell = tr.insertCell(10);
+      verCell.innerHTML = `<button class="btn" style="background:#f1f5f9;color:#475569;border:1px solid #cbd5e1;font-size:12px;padding:5px 14px"
+                                    onclick="showDetail('${m.trace_id}')">Ver</button>`;
+    });
+  }
+
+  setText('histRangeInfo', histFiltered.length
+    ? `Mostrando ${start + 1}–${Math.min(start + HIST_PAGE_SIZE, histFiltered.length)} de ${histFiltered.length}`
+    : 'Sin resultados');
+  setText('histPageInfo', `Página ${histPage} de ${totalPages}`);
+  document.getElementById('histPrevBtn').disabled = histPage <= 1;
+  document.getElementById('histNextBtn').disabled = histPage >= totalPages;
+}
+
+function showDetail(traceId) {
+  const m = allMetrics.find(x => x.trace_id === traceId);
+  if (!m) return;
+
+  setText('d-fecha', (m.timestamp || '').slice(0, 19).replace('T', ' '));
+  setText('d-canal', m.channel === 'whatsapp' ? 'WhatsApp' : 'Web');
+
+  if (m.channel === 'whatsapp') {
+    const nombre = m.integrante || 'Desconocido';
+    const numero = m.telefono || m.integrante || '—';
+    setText('d-integrante', nombre !== numero ? `${nombre} (${numero})` : numero);
+  } else {
+    setText('d-integrante', '—');
+  }
+
+  setText('d-tramite', m.tramite || '—');
+  setText('d-lat', fms(m.latency_ms));
+  setText('d-ttft', fms(m.ttft_ms));
+  setText('d-tok', `${m.input_tokens ?? 0} / ${m.output_tokens ?? 0} / ${m.total_tokens ?? 0}`);
+  setText('d-fb', m.fallback ? '⚠️ Sí' : '✅ No');
+
+  if (m.feedback) {
+    const s = m.feedback.score;
+    const label = s >= 0.8 ? '👍 Útil' : s <= 0.2 ? '👎 No útil' : '🤔 Neutral';
+    setText('d-feedback', m.feedback.comment ? `${label} — "${m.feedback.comment}"` : label);
+  } else {
+    setText('d-feedback', 'Sin feedback aún');
+  }
+
+  setText('d-query', m.user_query || '—');
+  setText('d-respuesta', m.respuesta || '—');
+
+  const errorWrap = document.getElementById('d-error-wrap');
+  if (m.error) {
+    errorWrap.style.display = '';
+    setText('d-error', m.error);
+  } else {
+    errorWrap.style.display = 'none';
+  }
+
+  document.getElementById('detailOverlay').style.display = 'flex';
+}
+
+function closeDetail() {
+  document.getElementById('detailOverlay').style.display = 'none';
+}
+
+/* ── Helpers ── */
+function setText(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = val;
+}
+function fms(v) { return v != null && v !== 0 ? Math.round(v) + ' ms' : (v === 0 ? '0 ms' : '—'); }
+function fpct(v) { return v != null ? v + '%' : '—'; }
+function trunc(s, n) { return s && s.length > n ? s.slice(0,n) + '…' : (s||''); }
+function esc(s) {
+  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+/* ── Init ── */
+applyTheme(localStorage.getItem('arco-theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+loadAll();
+setInterval(loadAll, 30000);
+</script>
+</body>
+</html>
